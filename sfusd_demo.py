@@ -49,6 +49,22 @@ def soupToString(elements):
     else:
         return elements.string.strip()
 
+def get_snippet(visible_text_string,yes_phrase):
+    i = visible_text_string.find(yes_phrase)
+    start_i = i - 200
+    if start_i < 0:
+        start_i = 0
+    end_i = i + len(yes_phrase) + 200
+    if end_i > (len(visible_text_string)-1):
+        end_i = len(visible_text_string) - 1
+    snippet = visible_text_string[start_i:end_i]
+    try:
+        snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
+    except:
+        snippet_clean = snippet
+    snippet_full = "\"..."+snippet_clean+"...\""
+    return snippet_full
+
 def classify(soup,yes_words_dict,curr_row_verdict,url):
     text = soup.findAll(text=True)
     visible_text = filter(visible,text)
@@ -57,22 +73,9 @@ def classify(soup,yes_words_dict,curr_row_verdict,url):
         yes_phrases = yes_words_dict[key]
         for yes_phrase in yes_phrases:
             if yes_phrase in visible_text_string:
-                #print type(visible_text_string)
-                #visible_text_string = unicodedata.normalize('NFKD', visible_text_string).encode('ascii','ignore')
-                i = visible_text_string.find(yes_phrase)
-                start_i = i - 100
-                if start_i < 0:
-                    start_i = 0
-                end_i = i + len(yes_phrase) + 100
-                if end_i > (len(visible_text_string)-1):
-                    end_i = len(visible_text_string) - 1
-                snippet = visible_text_string[start_i:end_i]
-                try:
-                    snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
-                except:
-                    snippet_clean = snippet
+                snippet = get_snippet(visible_text_string,yes_phrase)
                 key_verdict = curr_row_verdict[key]
-                curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+["\"..."+snippet_clean+"...\""])
+                curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
                 break
     return curr_row_verdict
 
