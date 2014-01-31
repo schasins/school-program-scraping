@@ -103,7 +103,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     print "*****"
     print school_name
 
-    soup, real_url = urlToSoup(school_sfusd_url)
+    soup, real_url = urlToSoup(school_sfusd_url,"")
     if not soup:
         return
 
@@ -114,7 +114,6 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     links_to_explore = []
     identified_links = {}
     orig_url = ""
-
     orig_domain = ""
     
     div = soup.find("div", {"id": "content-inner"})
@@ -130,9 +129,6 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
                 new_url = a[0]['href']
                 links_to_explore.append(new_url)
                 identified_links[new_url] = True
-    else:
-        print "no div"
-        print soup
 
     #now go through links_to_explore until run out, or until too many
     #for instance, lincolnhigh has this weird thing where it puts a return_url in the url
@@ -140,40 +136,13 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     counter = 0
     while ((links_to_explore) and (counter < 100)):
         url = links_to_explore.pop()
-        alt_url = url
-        print url
-        try:
-            #url might be global from the start
-            page = urllib2.urlopen(alt_url)
-        except Exception:
-            try:
-                #url might just lack http stuff
-                alt_url = "http://"+url
-                page = urllib2.urlopen(alt_url)
-            except Exception:
-                try:
-                    #url might be local, need school's base url
-                    alt_url = ""
-                    if (orig_url.endswith("/") and url.startswith("/")):
-                        alt_url = orig_url+url[1:]
-                    elif (orig_url.endswith("/") or url.startswith("/")):
-                        alt_url = orig_url+url
-                    else:
-                        alt_url = orig_url+"/"+url
-                    page = urllib2.urlopen(alt_url)
-                except Exception:
-                    print "couldn't do anything with this url"
-                    continue
-        print alt_url
-        real_url = page.geturl()
+        soup, real_url = urlToSoup(url,orig_url)
+        if soup == None:
+            continue
+        
         if orig_url == "":
             orig_url = real_url
             orig_domain = tldextract.extract(real_url).domain
-        try:
-            soup = BeautifulSoup(page.read())
-        except:
-            #sometimes it's a doc or something crazy that we can't parse
-            continue
 
         #we're really doing this page.  increment counter
         counter += 1
@@ -238,12 +207,31 @@ def writeHeadings(output,yes_words_dict):
         output.write(key+" : Passage;")
     output.write("\n")
 
-def urlToSoup(url):
+def urlToSoup(url,base_url):
     try:
-        page = urllib.urlopen(url)
-    except:
-        print "Couldn't open url: "+url
-        return None, None
+        #if url is global from the start, this should work
+        page = urllib2.urlopen(url)
+    except Exception:
+        try:
+            #url might just lack http stuff
+            alt_url = "http://"+url
+            page = urllib2.urlopen(alt_url)
+        except Exception:
+            try:
+               #url might be local, need a base url
+               alt_url = ""
+               if (base_url.endswith("/") and url.startswith("/")):
+                   alt_url = base_url+url[1:]
+               elif (base_url.endswith("/") or url.startswith("/")):
+                   alt_url = base_url+url
+               else:
+                   alt_url = base_url+"/"+url
+               page = urllib2.urlopen(alt_url)
+            except Exception:
+                 print "Couldn't open url: "+url
+                 return None, None
+
+    
     real_url = page.geturl()
     page_content =  page.read()
 
@@ -289,7 +277,7 @@ def runExtraction(input_csv,yes_words_csv):
     #load sfusd page with all school pages listed
     
     sfusd_schools_url = "http://www.sfusd.edu/en/schools/all-schools.html"
-    soup, real_url = urlToSoup(sfusd_schools_url)
+    soup, real_url = urlToSoup(sfusd_schools_url,"")
         
     links = soup.find("ul", {"class": "school-list"}).findAll("a")
 
