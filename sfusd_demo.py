@@ -11,6 +11,7 @@ import logging
 import unicodedata
 from StringIO import StringIO
 import gzip
+from weasyprint import HTML
 
 
 def nextFileVariation(filename):
@@ -49,7 +50,7 @@ def soupToString(elements):
     else:
         return elements.string.strip()
 
-def get_snippet(visible_text_string,yes_phrase):
+def getSnippet(visible_text_string,yes_phrase):
     i = visible_text_string.find(yes_phrase)
     start_i = i - 200
     if start_i < 0:
@@ -65,7 +66,21 @@ def get_snippet(visible_text_string,yes_phrase):
     snippet_full = "\"..."+snippet_clean+"...\""
     return snippet_full
 
-def classify(soup,yes_words_dict,curr_row_verdict,url):
+def savePDF(page_content, yes_phrase, url, key, school_name):
+    print yes_phrase
+    lower_page = page_content.lower()
+    i = lower_page.find(yes_phrase)
+    new_page = page_content
+    if (i > -1):
+        #may not run, if the text is somehow broken up by tags or something, but highly unlikely
+        new_page = page_content[:i]+"<b>"+page_content[i:(i + len(yes_phrase))]+"</b>"+page_content[(i + len(yes_phrase)):]
+
+    weasyprint = HTML(string=new_page)
+    weasyprint.write_pdf('test.pdf')
+    exit()
+    
+
+def classify(soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
     text = soup.findAll(text=True)
     visible_text = filter(visible,text)
     visible_text_string = soupToString(visible_text).lower()
@@ -73,9 +88,10 @@ def classify(soup,yes_words_dict,curr_row_verdict,url):
         yes_phrases = yes_words_dict[key]
         for yes_phrase in yes_phrases:
             if yes_phrase in visible_text_string:
-                snippet = get_snippet(visible_text_string,yes_phrase)
+                snippet = getSnippet(visible_text_string,yes_phrase)
                 key_verdict = curr_row_verdict[key]
                 curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
+                savePDF(page_content, yes_phrase, url, key, school_name)
                 break
     return curr_row_verdict
 
@@ -106,7 +122,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     print "*****"
     print school_name
 
-    soup, real_url = urlToSoup(school_sfusd_url,"")
+    soup, real_url, page_content = urlToSoup(school_sfusd_url,"")
     if not soup:
         return
 
@@ -122,7 +138,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     div = soup.find("div", {"id": "content-inner"})
     if div:
         #only want to run classification on that inner content
-        curr_row_verdict = classify(div,yes_words_dict,curr_row_verdict,real_url)
+        curr_row_verdict = classify(div,yes_words_dict,curr_row_verdict,real_url,page_content, school_name)
         children = div.findChildren()
         p = children[3]
         print p
@@ -139,7 +155,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     counter = 0
     while ((links_to_explore) and (counter < 100)):
         url = links_to_explore.pop()
-        soup, real_url = urlToSoup(url,orig_url)
+        soup, real_url, page_content = urlToSoup(url,orig_url)
         if soup == None:
             continue
         
@@ -150,7 +166,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
         #we're really doing this page.  increment counter
         counter += 1
         #classify with the current page
-        curr_row_verdict = classify(soup,yes_words_dict,curr_row_verdict,real_url)
+        curr_row_verdict = classify(soup,yes_words_dict,curr_row_verdict,real_url,page_content,school_name)
 
         #get new urls to add to links_to_explore
         real_url_domain = tldextract.extract(real_url).domain
@@ -196,7 +212,9 @@ def processYesWords(yes_words_csv):
             yes_words_dict[column_heading] = []
             yes_phrases = yes_words_row[1].split(",")
             for yes_phrase in yes_phrases:
-                yes_words_dict[column_heading].append(yes_phrase.rstrip().lstrip().lower())
+                clean_phrase = yes_phrase.rstrip().lstrip().lower()
+                if clean_phrase != "":
+                    yes_words_dict[column_heading].append(clean_phrase)
         else:
             done_first = True
     return yes_words_dict
@@ -232,7 +250,7 @@ def urlToSoup(url,base_url):
                page = urllib2.urlopen(alt_url)
             except Exception:
                  print "Couldn't open url: "+url
-                 return None, None
+                 return None, None, None
 
     
     real_url = page.geturl()
@@ -248,8 +266,8 @@ def urlToSoup(url,base_url):
         soup = BeautifulSoup(page_content)
     except:
         print "Couldn't soup url: "+url
-        return None, None
-    return soup, real_url
+        return None, None, None
+    return soup, real_url, page_content
 
 def runExtraction(input_csv,yes_words_csv):
     #process input
@@ -280,7 +298,7 @@ def runExtraction(input_csv,yes_words_csv):
     #load sfusd page with all school pages listed
     
     sfusd_schools_url = "http://www.sfusd.edu/en/schools/all-schools.html"
-    soup, real_url = urlToSoup(sfusd_schools_url,"")
+    soup, real_url, page_content = urlToSoup(sfusd_schools_url,"")
         
     links = soup.find("ul", {"class": "school-list"}).findAll("a")
 
