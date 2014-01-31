@@ -30,7 +30,7 @@ def nextFileVariation(filename):
 def blankVerdict(yes_words_dict):
     verdict = {}
     for entry in yes_words_dict:
-        verdict[entry] = (False,"","")
+        verdict[entry] = (False,[],[])
     return verdict
 
 def visible(element):
@@ -54,9 +54,6 @@ def classify(soup,yes_words_dict,curr_row_verdict,url):
     visible_text = filter(visible,text)
     visible_text_string = soupToString(visible_text).lower()
     for key in yes_words_dict:
-        if curr_row_verdict[key][0]:
-            #we've already found evidence of this program. don't bother to look
-            continue
         yes_phrases = yes_words_dict[key]
         for yes_phrase in yes_phrases:
             if yes_phrase in visible_text_string:
@@ -74,7 +71,8 @@ def classify(soup,yes_words_dict,curr_row_verdict,url):
                     snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
                 except:
                     snippet_clean = snippet
-                curr_row_verdict[key] = (True, url, "\"..."+snippet_clean+"...\"")
+                key_verdict = curr_row_verdict[key]
+                curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+["\"..."+snippet_clean+"...\""])
                 break
     return curr_row_verdict
 
@@ -232,8 +230,8 @@ def writeVerdict(school_name,output,verdict):
     for key in sorted_verdict:
         value = sorted_verdict[key]
         output.write(str(value[0])+";")
-        output.write(value[1]+";")
-        output.write(value[2]+";")
+        output.write(", ".join(value[1])+";")
+        output.write(", ".join(value[2])+";")
     output.write("\n")
 
 def processClickStrings(click_strings):
@@ -271,6 +269,19 @@ def writeHeadings(output,yes_words_dict):
         output.write(key+" : Passage;")
     output.write("\n")
 
+def urlToSoup(url):
+    page = urllib.urlopen(url)
+    real_url = page.geturl()
+    page_content =  page.read()
+
+    if page.info().get('Content-Encoding') == 'gzip':
+        buf = StringIO(page.read())
+        f = gzip.GzipFile(fileobj=buf)
+        page_content = f.read()
+    
+    soup = BeautifulSoup(page_content)
+    return soup, real_url
+
 def runExtraction(input_csv,yes_words_csv):
     #process input
     csvfile = open(input_csv, 'rb')
@@ -300,12 +311,7 @@ def runExtraction(input_csv,yes_words_csv):
     #load sfusd page with all school pages listed
     
     sfusd_schools_url = "http://www.sfusd.edu/en/schools/all-schools.html"
-    page = urllib.urlopen(sfusd_schools_url)
-    page_content =  page.read()
-    
-    soup = BeautifulSoup(page_content)
-    #soup = BeautifulSoup(page_content)
-    #print soup.prettify()
+    soup, real_url = urlToSoup(sfusd_schools_url)
         
     links = soup.find("ul", {"class": "school-list"}).findAll("a")
 
