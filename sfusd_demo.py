@@ -102,43 +102,12 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     school_sfusd_url = input_row[1]
     print "*****"
     print school_name
-    
-    #classification on sfusd school page
-    try:
-        page = urllib2.urlopen(school_sfusd_url)
-    except:
-        print "Couldn't open the school's sfusd page.  Returning."
-        return
-    real_sfsud_url = page.geturl()
-    
-    soup = None
-    try:
-        #print "using default encoding"
-        soup = BeautifulSoup(page.read())
-    except Exception:
-        #sometimes encoding fails
-        #some of these pages are UTF-8
-        try:
-            #print "using UTF-8 encoding"
-            soup = BeautifulSoup(page.read().decode("UTF-8"))
-        except Exception:
-            print "Couldn't do anything with this school because couldn't soup page."
 
-    #print "soup"
-    #print str(soup.prettify())[:500]
-    
-    if soup.find("div") == None:
-        #maybe encoding was bad
-        try:
-            #print "using UTF-8 encoding"
-            soup = BeautifulSoup(page.read().decode("UTF-8"))
-            #print page.read().decode("UTF-8")[:500]
-        except Exception:
-            print "Couldn't do anything with this school because couldn't soup page."
-      
-    #print "soup"
-    #print str(soup)[:500]  
-        
+    soup, real_url = urlToSoup(school_sfusd_url)
+    if not soup:
+        return
+
+    #initialize verdict
     curr_row_verdict = blankVerdict(yes_words_dict)
     
     #start accumulating links to explore from the school sites, starting with the main page
@@ -151,7 +120,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     div = soup.find("div", {"id": "content-inner"})
     if div:
         #only want to run classification on that inner content
-        curr_row_verdict = classify(div,yes_words_dict,curr_row_verdict,real_sfsud_url)
+        curr_row_verdict = classify(div,yes_words_dict,curr_row_verdict,real_url)
         children = div.findChildren()
         p = children[3]
         print p
@@ -163,7 +132,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
                 identified_links[new_url] = True
     else:
         print "no div"
-        print soup.prettify()
+        print soup
 
     #now go through links_to_explore until run out, or until too many
     #for instance, lincolnhigh has this weird thing where it puts a return_url in the url
@@ -270,16 +239,25 @@ def writeHeadings(output,yes_words_dict):
     output.write("\n")
 
 def urlToSoup(url):
-    page = urllib.urlopen(url)
+    try:
+        page = urllib.urlopen(url)
+    except:
+        print "Couldn't open url: "+url
+        return None, None
     real_url = page.geturl()
     page_content =  page.read()
 
     if page.info().get('Content-Encoding') == 'gzip':
-        buf = StringIO(page.read())
+        print "gzipped"
+        buf = StringIO(page_content)
         f = gzip.GzipFile(fileobj=buf)
         page_content = f.read()
-    
-    soup = BeautifulSoup(page_content)
+
+    try:
+        soup = BeautifulSoup(page_content)
+    except:
+        print "Couldn't soup url: "+url
+        return None, None
     return soup, real_url
 
 def runExtraction(input_csv,yes_words_csv):
