@@ -97,15 +97,19 @@ def savePDF(parent_soup, soup, yes_phrase, url, key, school_name):
         contents_len = len(contents)
         for i in range(contents_len):
             content = str(contents[i])
-            text = str(content).lower()
+            text = content.lower()
             if yes_phrase in text:
-                tag = Tag(parent_soup, "div", [("style", "background-color:green")])
-                tag.insert(0,content)
+                i = text.find(yes_phrase)
+                tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
+                tag.append(content[:i])
+                bold = Tag(parent_soup, "b")
+                bold.insert(0,content[i:(i + len(yes_phrase))])
+                tag.append(bold)
+                tag.append(content[(i + len(yes_phrase)):])
                 target_node.contents[i] = tag
                 
         weasyprint = HTML(string=target_node.prettify())
         weasyprint.write_pdf('test.pdf')
-        print target_node
     #print soup.prettify()
     exit()
 
