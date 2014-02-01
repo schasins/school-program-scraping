@@ -1,4 +1,4 @@
-from BeautifulSoup import BeautifulSoup
+from BeautifulSoup import BeautifulSoup, Tag
 import urllib
 import urllib2
 import csv
@@ -66,7 +66,7 @@ def getSnippet(visible_text_string,yes_phrase):
     snippet_full = "\"..."+snippet_clean+"...\""
     return snippet_full
 
-def savePDF(page_content, yes_phrase, url, key, school_name):
+def savePDFOld(page_content, yes_phrase, url, key, school_name):
     print yes_phrase
     lower_page = page_content.lower()
     i = lower_page.find(yes_phrase)
@@ -78,9 +78,38 @@ def savePDF(page_content, yes_phrase, url, key, school_name):
     weasyprint = HTML(string=new_page)
     weasyprint.write_pdf('test.pdf')
     exit()
-    
 
-def classify(soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
+def hasYesPhrase(tag, yes_phrase):
+    contents = tag.contents
+    if (len(contents) > 0):
+        for content in contents:
+            text = str(content)
+            lower_text = text.lower()
+            if yes_phrase in lower_text:
+                return True
+    return False
+
+def savePDF(parent_soup, soup, yes_phrase, url, key, school_name):
+    target_nodes = soup.findAll(lambda tag: hasYesPhrase(tag,yes_phrase))
+    print target_nodes
+    for target_node in target_nodes:
+        contents = target_node.contents
+        contents_len = len(contents)
+        for i in range(contents_len):
+            content = str(contents[i])
+            text = str(content).lower()
+            if yes_phrase in text:
+                tag = Tag(parent_soup, "div", [("style", "background-color:green")])
+                tag.insert(0,content)
+                target_node.contents[i] = tag
+                
+        weasyprint = HTML(string=target_node.prettify())
+        weasyprint.write_pdf('test.pdf')
+        print target_node
+    #print soup.prettify()
+    exit()
+
+def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
     text = soup.findAll(text=True)
     visible_text = filter(visible,text)
     visible_text_string = soupToString(visible_text).lower()
@@ -88,10 +117,14 @@ def classify(soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
         yes_phrases = yes_words_dict[key]
         for yes_phrase in yes_phrases:
             if yes_phrase in visible_text_string:
+                #print "yes_phrase: "+yes_phrase
+                #print visible_text_string
+                #print yes_phrase in visible_text_string
                 snippet = getSnippet(visible_text_string,yes_phrase)
                 key_verdict = curr_row_verdict[key]
                 curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
-                savePDF(page_content, yes_phrase, url, key, school_name)
+                #savePDFOld(page_content, yes_phrase, url, key, school_name)
+                savePDF(parent_soup,soup, yes_phrase, url, key, school_name)
                 break
     return curr_row_verdict
 
@@ -138,7 +171,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     div = soup.find("div", {"id": "content-inner"})
     if div:
         #only want to run classification on that inner content
-        curr_row_verdict = classify(div,yes_words_dict,curr_row_verdict,real_url,page_content, school_name)
+        curr_row_verdict = classify(soup,soup.find("div", {"id": "content"}),yes_words_dict,curr_row_verdict,real_url,page_content, school_name)
         children = div.findChildren()
         p = children[3]
         print p
@@ -166,7 +199,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
         #we're really doing this page.  increment counter
         counter += 1
         #classify with the current page
-        curr_row_verdict = classify(soup,yes_words_dict,curr_row_verdict,real_url,page_content,school_name)
+        curr_row_verdict = classify(soup,soup,yes_words_dict,curr_row_verdict,real_url,page_content,school_name)
 
         #get new urls to add to links_to_explore
         real_url_domain = tldextract.extract(real_url).domain
@@ -267,6 +300,7 @@ def urlToSoup(url,base_url):
     except:
         print "Couldn't soup url: "+url
         return None, None, None
+
     return soup, real_url, page_content
 
 def runExtraction(input_csv,yes_words_csv):
