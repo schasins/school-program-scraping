@@ -11,7 +11,7 @@ import logging
 import unicodedata
 from StringIO import StringIO
 import gzip
-from weasyprint import HTML
+from weasyprint import HTML, CSS
 
 
 def nextFileVariation(filename):
@@ -99,17 +99,19 @@ def savePDF(parent_soup, soup, yes_phrase, url, key, school_name):
             content = str(contents[i])
             text = content.lower()
             if yes_phrase in text:
-                i = text.find(yes_phrase)
+                j = text.find(yes_phrase)
                 tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
-                tag.append(content[:i])
+                tag.append(content[:j])
                 bold = Tag(parent_soup, "b")
-                bold.insert(0,content[i:(i + len(yes_phrase))])
+                bold.insert(0,content[j:(j + len(yes_phrase))])
                 tag.append(bold)
-                tag.append(content[(i + len(yes_phrase)):])
+                tag.append(content[(j + len(yes_phrase)):])
                 target_node.contents[i] = tag
-                
-        weasyprint = HTML(string=target_node.prettify())
-        weasyprint.write_pdf('test.pdf')
+
+        body = Tag(parent_soup,"body")
+        body.append(target_node)
+        weasyprint = HTML(string=body.prettify())
+        weasyprint.write_pdf('test.pdf',stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
     #print soup.prettify()
     exit()
 
