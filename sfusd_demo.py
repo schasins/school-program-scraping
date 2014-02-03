@@ -12,7 +12,11 @@ import unicodedata
 from StringIO import StringIO
 import gzip
 from weasyprint import HTML, CSS
+from PyPDF2 import PdfFileMerger, PdfFileReader, PdfFileWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter, landscape
 
+pdf_filename = ""
 
 def nextFileVariation(filename):
     i = filename.rfind(".")
@@ -20,13 +24,14 @@ def nextFileVariation(filename):
     filename_r = filename[i:]
 
     candidate_filename=""
-    counter = 1
+    filename_counter = 1
     while (True):
-        candidate_filename = filename_l+"_"+str(counter)+filename_r
+        variation_filename = filename_l+"_"+str(filename_counter)+filename_r
+        candidate_filename = "spreadsheets/"+variation_filename
         if (not (os.path.exists(candidate_filename))):
             break
-        counter += 1
-    return candidate_filename
+        filename_counter += 1
+    return variation_filename
 
 def blankVerdict(yes_words_dict):
     verdict = {}
@@ -89,9 +94,29 @@ def hasYesPhrase(tag, yes_phrase):
                 return True
     return False
 
+def addWatermark(pdf_filename, url, key, school_name):
+    packet = StringIO()
+    c = canvas.Canvas(packet, pagesize=letter)
+    width, height = letter
+    c.drawString(20,height+25,school_name+": "+key)
+    link_width = c.stringWidth(url)
+    link_rect = (20, height+10, link_width, 10)
+    c.setFillColorRGB(0,0,255) #choose your font colour
+    c.drawString(20, height+10, url)
+    c.linkURL(url, link_rect)
+    c.save()
+    packet.seek(0)
+    watermark = PdfFileReader(packet)
+    input = PdfFileReader(pdf_filename)
+    output = PdfFileWriter()
+    for i in range(input.getNumPages()):
+        input_page = input.getPage(i)
+        input_page.mergePage(watermark.getPage(0))
+        output.addPage(input_page)
+    output.write(file(pdf_filename,"wb"))
+
 def savePDF(parent_soup, soup, yes_phrase, url, key, school_name):
     target_nodes = soup.findAll(lambda tag: hasYesPhrase(tag,yes_phrase))
-    print target_nodes
     for target_node in target_nodes:
         contents = target_node.contents
         contents_len = len(contents)
@@ -111,9 +136,15 @@ def savePDF(parent_soup, soup, yes_phrase, url, key, school_name):
         body = Tag(parent_soup,"body")
         body.append(target_node)
         weasyprint = HTML(string=body.prettify())
-        weasyprint.write_pdf('test.pdf',stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
-    #print soup.prettify()
-    exit()
+        tmp_filename = 'pdfs/tmp.pdf'
+        weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
+        addWatermark(tmp_filename, url, key, school_name)
+        
+        merger = PdfFileMerger()
+        if (os.path.exists(pdf_filename)):
+            merger.append(PdfFileReader(file(pdf_filename, 'rb')))
+        merger.append(PdfFileReader(file(tmp_filename, 'rb')))
+        merger.write(pdf_filename)
 
 def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
     text = soup.findAll(text=True)
@@ -123,9 +154,6 @@ def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,
         yes_phrases = yes_words_dict[key]
         for yes_phrase in yes_phrases:
             if yes_phrase in visible_text_string:
-                #print "yes_phrase: "+yes_phrase
-                #print visible_text_string
-                #print yes_phrase in visible_text_string
                 snippet = getSnippet(visible_text_string,yes_phrase)
                 key_verdict = curr_row_verdict[key]
                 curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
@@ -142,11 +170,6 @@ def getLinksFromSoup(soup,click_words):
         if ((len(text) > 0) and (text[0] != None) and (a.has_key('href'))):
             text = str(text[0]).lower()
             href = a['href'].lower()
-            #print href
-            #print href.startswith("#")
-            #print (not any(href.endswith(suffix) for suffix in ["pdf", "doc", "docx"]))
-            #print text
-            #print any(click_word in text for click_word in click_words)
             if ((not href.startswith("#"))\
                 and \
                 (not any(href.endswith(suffix) for suffix in ["pdf", "doc", "docx","jpg","jpeg","png","gif"]))\
@@ -296,7 +319,6 @@ def urlToSoup(url,base_url):
     page_content =  page.read()
 
     if page.info().get('Content-Encoding') == 'gzip':
-        print "gzipped"
         buf = StringIO(page_content)
         f = gzip.GzipFile(fileobj=buf)
         page_content = f.read()
@@ -330,10 +352,15 @@ def runExtraction(input_csv,yes_words_csv):
     click_words = processClickStrings(click_strings)
 
     #make output
-    output_filename = nextFileVariation(input_csv)
+    variation_filename = nextFileVariation(input_csv)
+    output_filename = "spreadsheets/"+variation_filename
     output = open(output_filename, 'w')
     writeHeadings(output,yes_words_dict)
 
+    #make PDF output
+    front = variation_filename.split(".")[0]
+    global pdf_filename
+    pdf_filename = "pdfs/"+front+".pdf"
     
     #load sfusd page with all school pages listed
     
@@ -354,3 +381,6 @@ def main():
     yes_words_csv = "yes_words.csv"
     runExtraction(input_csv,yes_words_csv)
 main()
+
+
+filename_counter = 1
