@@ -128,11 +128,11 @@ def addWatermark(pdf_filename, url, key, school_name):
             print "Failed to merge page, will lack watermark."
         output.addPage(input_page)
     try:
-        output.write(file(watermark_filename,"wb"))
+        output.write(file(pdf_filename,"wb"))
     except:
         print "Failed to write the new file with new pages, must skip evidence point."
-        return
-    output.write(file(pdf_filename,"wb"))
+        return False
+    return True
 
 def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
     grandparent_node = target_node.parent.parent
@@ -159,13 +159,14 @@ def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
     weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
     parent_node.contents[i] = target_node #return to old state
 
-    addWatermark(tmp_filename, url, key, school_name)
-        
-    merger = PdfFileMerger()
-    if (os.path.exists(pdf_filename)):
-        merger.append(PdfFileReader(file(pdf_filename, 'rb')))
-    merger.append(PdfFileReader(file(tmp_filename, 'rb')))
-    merger.write(pdf_filename)
+    new_pages = addWatermark(tmp_filename, url, key, school_name)
+
+    if new_pages:
+        merger = PdfFileMerger()
+        if (os.path.exists(pdf_filename)):
+            merger.append(PdfFileReader(file(pdf_filename, 'rb')))
+        merger.append(PdfFileReader(file(tmp_filename, 'rb')))
+        merger.write(pdf_filename)
 
 def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
     text = soup.findAll(text=True)
