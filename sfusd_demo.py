@@ -15,6 +15,8 @@ from weasyprint import HTML, CSS
 from PyPDF2 import PdfFileMerger, PdfFileReader, PdfFileWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate
+from reportlab.lib.colors import orange
 
 pdf_filename = ""
 counter = 0
@@ -100,39 +102,18 @@ def hasYesPhrase(tag, yes_phrase):
             return True
     return False
 
-def addWatermark(pdf_filename, url, key, school_name):
-    global counter
-    counter += 1
-    
-    packet = StringIO()
-    c = canvas.Canvas(packet, pagesize=letter)
+def makeSepPage(filename, url, key, school_name):
+    c = canvas.Canvas(filename, pagesize=letter)
     width, height = letter
-    c.drawString(20,height+25,school_name+": "+key)
-    c.drawString(width-40, height+25, str(counter))
+    c.setFillColor(orange) #choose your font colour
+    c.drawString(30,3*height/4+40,school_name)
+    c.drawString(30,3*height/4+20,key)
     link_width = c.stringWidth(url)
-    link_rect = (20, height+10, link_width, 10)
-    c.drawString(width-40, height+25, str(counter))
+    link_rect = (30, 3*height/4, link_width, 10)
     c.setFillColorRGB(0,0,255) #choose your font colour
-    c.drawString(20, height+10, url)
+    c.drawString(30, 3*height/4, url)
     c.linkURL(url, link_rect)
     c.save()
-    packet.seek(0)
-    watermark = PdfFileReader(packet)
-    input = PdfFileReader(pdf_filename)
-    output = PdfFileWriter()
-    for i in range(input.getNumPages()):
-        input_page = input.getPage(i)
-        try:
-            input_page.mergePage(watermark.getPage(0))
-        except:
-            print "Failed to merge page, will lack watermark."
-        output.addPage(input_page)
-    try:
-        output.write(file(pdf_filename,"wb"))
-    except:
-        print "Failed to write the new file with new pages, must skip evidence point."
-        return False
-    return True
 
 def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
     grandparent_node = target_node.parent.parent
@@ -159,14 +140,15 @@ def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
     weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
     parent_node.contents[i] = target_node #return to old state
 
-    new_pages = addWatermark(tmp_filename, url, key, school_name)
-
-    if new_pages:
-        merger = PdfFileMerger()
-        if (os.path.exists(pdf_filename)):
-            merger.append(PdfFileReader(file(pdf_filename, 'rb')))
-        merger.append(PdfFileReader(file(tmp_filename, 'rb')))
-        merger.write(pdf_filename)
+    sep_filename = "pdfs/sep.pdf"
+    makeSepPage(sep_filename, url, key, school_name)
+    
+    merger = PdfFileMerger()
+    if (os.path.exists(pdf_filename)):
+        merger.append(PdfFileReader(file(pdf_filename, 'rb')))
+    merger.append(PdfFileReader(file(sep_filename, 'rb')))
+    merger.append(PdfFileReader(file(tmp_filename, 'rb')))
+    merger.write(pdf_filename)
 
 def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
     text = soup.findAll(text=True)
