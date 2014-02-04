@@ -17,10 +17,12 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate
 from reportlab.lib.colors import orange
+from text.classifiers import NaiveBayesClassifier
 
 pdf_filename = ""
 counter = 0
 watermark_filename = "pdfs/watermark.pdf"
+classifiers = {}
 
 def nextFileVariation(filename):
     i = filename.rfind(".")
@@ -261,6 +263,40 @@ def writeVerdict(school_name,output,verdict):
         output.write(", ".join(value[2])+";")
     output.write("\n")
 
+def processTextData(filename):
+    f = open(filename, 'r')
+    column_names_str = f.readline()
+    str = re.search('\[(.*)\]',column_names_str)
+    column_names = str.group(1).split(",")
+    #print column_names
+
+    training_data = {}
+    for key in column_names:
+        training_data[key] = []
+
+    whole_str = f.read()
+    passages = whole_str.split("*DELIM*")
+    passages = passages[1:]
+    for passage in passages:
+        columns_str = re.search('\[(.*)\]',passage)
+        columns = columns_str.group(1).split(",")
+        #print columns
+        i = passage.find("]")
+        classify_str = passage[i+1:]
+        print "****"
+        print classify_str.strip()
+        for i in range(len(columns)):
+            column = columns[i]
+            if column == "*":
+                training_data[column_names[i]].append((classify_str,'pos'))
+            else:
+                training_data[column_names[i]].append((classify_str,'neg'))
+
+    global classifiers
+    classifiers = {}
+    for key in training_data:
+        classifiers[key] = NaiveBayesClassifier(training_data[key])
+
 def processClickStrings(click_strings):
     click_words = []
     for string in click_strings:
@@ -339,7 +375,7 @@ def urlToSoup(url,base_url):
 
     return soup, real_url, page_content
 
-def runExtraction(input_csv,yes_words_csv):
+def runExtraction(input_csv,yes_words_csv,categorized_text):
     #process input
     csvfile = open(input_csv, 'rb')
     input_reader = csv.reader(csvfile, delimiter=',')
@@ -358,6 +394,9 @@ def runExtraction(input_csv,yes_words_csv):
                    "Special Education","Staff & Faculty Directory","About Lowell",\
                    "Lowell PTSA","About Attendance","Wellness 101","Freshmen"]
     click_words = processClickStrings(click_strings)
+
+    #process categorized data
+    processTextData(categorized_text)
 
     #make output
     variation_filename = nextFileVariation(input_csv)
@@ -387,7 +426,8 @@ def runExtraction(input_csv,yes_words_csv):
 def main():
     input_csv = "schools.csv"
     yes_words_csv = "yes_words.csv"
-    runExtraction(input_csv,yes_words_csv)
+    categorized_text = "categorized_text.txt"
+    runExtraction(input_csv,yes_words_csv,categorized_text)
 main()
 
 
