@@ -121,7 +121,10 @@ def addWatermark(pdf_filename, url, key, school_name):
     output = PdfFileWriter()
     for i in range(input.getNumPages()):
         input_page = input.getPage(i)
-        input_page.mergePage(watermark.getPage(0))
+        try:
+            input_page.mergePage(watermark.getPage(0))
+        except:
+            print "Failed to merge page, will lack watermark."
         output.addPage(input_page)
     output.write(file(pdf_filename,"wb"))
 
