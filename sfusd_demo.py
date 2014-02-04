@@ -37,7 +37,7 @@ def nextFileVariation(filename):
 def blankVerdict(yes_words_dict):
     verdict = {}
     for entry in yes_words_dict:
-        verdict[entry] = (False,[],[])
+        verdict[entry] = (False,[],[],0)
     return verdict
 
 def visible(element):
@@ -163,15 +163,19 @@ def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,
     visible_text = filter(visible,text)
     visible_text_string = soupToString(visible_text).lower()
     for key in yes_words_dict:
-        yes_phrases = yes_words_dict[key]
-        for yes_phrase in yes_phrases:
-            if yes_phrase in visible_text_string:
-                matches = filter((lambda tag: hasYesPhrase(tag,yes_phrase)), visible_text)
-                for match in matches:
-                    snippet = getSnippet(match,yes_phrase)
-                    key_verdict = curr_row_verdict[key]
-                    curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
-                    savePDF(parent_soup, match, yes_phrase, url, key, school_name)
+        #check if surpassed evidence limit for this key
+        if curr_row_verdict[key][3] < 12:
+            yes_phrases = yes_words_dict[key]
+            for yes_phrase in yes_phrases:
+                if yes_phrase in visible_text_string:
+                    matches = filter((lambda tag: hasYesPhrase(tag,yes_phrase)), visible_text)
+                    for match in matches:
+                        key_verdict = curr_row_verdict[key]
+                        #check if surpassed evidence limit for this key
+                        if key_verdict[3] < 12:
+                            snippet = getSnippet(match,yes_phrase)
+                            curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet], key_verdict[3]+1)
+                            savePDF(parent_soup, match, yes_phrase, url, key, school_name)
     return curr_row_verdict
 
 def getLinksFromSoup(soup,click_words):
