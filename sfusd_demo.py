@@ -212,7 +212,8 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
         children = div.contents
         p = children[3]
         print p
-        if ("Website: " in str(p)):
+        p_str = str(p)
+        if (("Website: " in str_p) or ("School Loop: " in str_p)):
             a = p.findAll('a')
             if (len(a)>0):
                 new_url = a[0]['href']
