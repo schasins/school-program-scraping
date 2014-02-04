@@ -126,7 +126,10 @@ def addWatermark(pdf_filename, url, key, school_name):
         except:
             print "Failed to merge page, will lack watermark."
         output.addPage(input_page)
-    output.write(file(pdf_filename,"wb"))
+    try:
+        output.write(file(pdf_filename,"wb"))
+    except:
+        print "Failed to write watermarked output, this evidence point will lack watermark."
 
 def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
     grandparent_node = target_node.parent.parent
