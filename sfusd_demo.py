@@ -53,45 +53,49 @@ def soupToString(elements):
             string+=" "+soupToString(element)
         return string
     else:
-        return elements.string.strip()
+        return str(elements).strip()
 
-def getSnippet(visible_text_string,yes_phrase):
-    i = visible_text_string.find(yes_phrase)
-    start_i = i - 200
-    if start_i < 0:
-        start_i = 0
-    end_i = i + len(yes_phrase) + 200
-    if end_i > (len(visible_text_string)-1):
-        end_i = len(visible_text_string) - 1
-    snippet = visible_text_string[start_i:end_i]
+def getSnippet(tag,yes_phrase):
+    snippet = str(tag)
+
+    #we don't want super long snippets
+    if (len(snippet) > (1000+len(yes_phrase))):
+        snippet_lower = snippet.lower()
+        i = snippet_lower.find(yes_phrase)
+        start_i = i - 300
+        if start_i < 0:
+            start_i = 0
+        end_i = i + len(yes_phrase) + 300
+        if end_i > (len(snippet)-1):
+            end_i = len(snippet) - 1
+        snippet = "..."+snippet[start_i:end_i]+"..."
+        
     try:
         snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
     except:
         snippet_clean = snippet
-    snippet_full = "\"..."+snippet_clean+"...\""
+        
+    snippet_full = "\""+snippet_clean+"\""
     return snippet_full
 
-def savePDFOld(page_content, yes_phrase, url, key, school_name):
-    print yes_phrase
-    lower_page = page_content.lower()
-    i = lower_page.find(yes_phrase)
-    new_page = page_content
-    if (i > -1):
-        #may not run, if the text is somehow broken up by tags or something, but highly unlikely
-        new_page = page_content[:i]+"<b>"+page_content[i:(i + len(yes_phrase))]+"</b>"+page_content[(i + len(yes_phrase)):]
-
-    weasyprint = HTML(string=new_page)
-    weasyprint.write_pdf('test.pdf')
-    exit()
-
 def hasYesPhrase(tag, yes_phrase):
-    contents = tag.contents
-    if (len(contents) > 0):
-        for content in contents:
-            text = str(content)
-            lower_text = text.lower()
-            if yes_phrase in lower_text:
-                return True
+    text = str(tag)
+    lower_text = text.lower()
+    num_words = len(yes_phrase.split(" "))
+    if yes_phrase in lower_text:
+        if num_words > 1:
+            return True
+        #if this is a 1-word yes phrase, some extra processing
+        left_fine = False
+        right_fine = False
+        l = lower_text.find(yes_phrase)
+        if ((l == 0) or (not lower_text[l-1].isalpha())):
+            left_fine = True
+        r = l+len(yes_phrase)
+        if ((r == len(lower_text)) or (not lower_text[r].isalpha())):
+            right_fine = True
+        if left_fine and right_fine:
+            return True
     return False
 
 def addWatermark(pdf_filename, url, key, school_name):
@@ -115,36 +119,38 @@ def addWatermark(pdf_filename, url, key, school_name):
         output.addPage(input_page)
     output.write(file(pdf_filename,"wb"))
 
-def savePDF(parent_soup, soup, yes_phrase, url, key, school_name):
-    target_nodes = soup.findAll(lambda tag: hasYesPhrase(tag,yes_phrase))
-    for target_node in target_nodes:
-        contents = target_node.contents
-        contents_len = len(contents)
-        for i in range(contents_len):
-            content = str(contents[i])
-            text = content.lower()
-            if yes_phrase in text:
-                j = text.find(yes_phrase)
-                tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
-                tag.append(content[:j])
-                bold = Tag(parent_soup, "b")
-                bold.insert(0,content[j:(j + len(yes_phrase))])
-                tag.append(bold)
-                tag.append(content[(j + len(yes_phrase)):])
-                target_node.contents[i] = tag
+def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
+    grandparent_node = target_node.parent.parent
+    parent_node = target_node.parent
+    parent_contents = parent_node.contents
+    for i in range(len(parent_contents)):
+        if parent_contents[i] == target_node:
+            break
+    content = str(target_node)
+    text = content.lower()
+    j = text.find(yes_phrase)
+    tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
+    tag.append(content[:j])
+    bold = Tag(parent_soup, "b")
+    bold.insert(0,content[j:(j + len(yes_phrase))])
+    tag.append(bold)
+    tag.append(content[(j + len(yes_phrase)):])
+    parent_node.contents[i] = tag
 
-        body = Tag(parent_soup,"body")
-        body.append(target_node)
-        weasyprint = HTML(string=body.prettify())
-        tmp_filename = 'pdfs/tmp.pdf'
-        weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
-        addWatermark(tmp_filename, url, key, school_name)
+    body = Tag(parent_soup,"body")
+    body.append(grandparent_node)
+    weasyprint = HTML(string=body.prettify())
+    tmp_filename = 'pdfs/tmp.pdf'
+    weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
+    parent_node.contents[i] = target_node #return to old state
+
+    addWatermark(tmp_filename, url, key, school_name)
         
-        merger = PdfFileMerger()
-        if (os.path.exists(pdf_filename)):
-            merger.append(PdfFileReader(file(pdf_filename, 'rb')))
-        merger.append(PdfFileReader(file(tmp_filename, 'rb')))
-        merger.write(pdf_filename)
+    merger = PdfFileMerger()
+    if (os.path.exists(pdf_filename)):
+        merger.append(PdfFileReader(file(pdf_filename, 'rb')))
+    merger.append(PdfFileReader(file(tmp_filename, 'rb')))
+    merger.write(pdf_filename)
 
 def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,school_name):
     text = soup.findAll(text=True)
@@ -154,12 +160,12 @@ def classify(parent_soup, soup,yes_words_dict,curr_row_verdict,url,page_content,
         yes_phrases = yes_words_dict[key]
         for yes_phrase in yes_phrases:
             if yes_phrase in visible_text_string:
-                snippet = getSnippet(visible_text_string,yes_phrase)
-                key_verdict = curr_row_verdict[key]
-                curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
-                #savePDFOld(page_content, yes_phrase, url, key, school_name)
-                savePDF(parent_soup,soup, yes_phrase, url, key, school_name)
-                break
+                matches = filter((lambda tag: hasYesPhrase(tag,yes_phrase)), visible_text)
+                for match in matches:
+                    snippet = getSnippet(match,yes_phrase)
+                    key_verdict = curr_row_verdict[key]
+                    curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet])
+                    savePDF(parent_soup, match, yes_phrase, url, key, school_name)
     return curr_row_verdict
 
 def getLinksFromSoup(soup,click_words):
@@ -199,9 +205,7 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
     
     div = soup.find("div", {"id": "content-inner"})
     if div:
-        #only want to run classification on that inner content
-        curr_row_verdict = classify(soup,soup.find("div", {"id": "content"}),yes_words_dict,curr_row_verdict,real_url,page_content, school_name)
-        children = div.findChildren()
+        children = div.contents
         p = children[3]
         print p
         if ("Website: " in str(p)):
@@ -210,6 +214,8 @@ def runExtractionOneRow(input_row,output,yes_words_dict,click_words):
                 new_url = a[0]['href']
                 links_to_explore.append(new_url)
                 identified_links[new_url] = True
+        #only want to run classification on that inner content
+        curr_row_verdict = classify(soup,soup.find("div", {"id": "content"}),yes_words_dict,curr_row_verdict,real_url,page_content, school_name)
 
     #now go through links_to_explore until run out, or until too many
     #for instance, lincolnhigh has this weird thing where it puts a return_url in the url
