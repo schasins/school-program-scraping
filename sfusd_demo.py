@@ -18,6 +18,7 @@ from reportlab.lib.pagesizes import letter, landscape
 
 pdf_filename = ""
 counter = 0
+watermark_filename = "pdfs/watermark.pdf"
 
 def nextFileVariation(filename):
     i = filename.rfind(".")
@@ -127,9 +128,11 @@ def addWatermark(pdf_filename, url, key, school_name):
             print "Failed to merge page, will lack watermark."
         output.addPage(input_page)
     try:
-        output.write(file(pdf_filename,"wb"))
+        output.write(file(watermark_filename,"wb"))
     except:
-        print "Failed to write watermarked output, this evidence point will lack watermark."
+        print "Failed to write the new file with new pages, must skip evidence point."
+        return
+    output.write(file(pdf_filename,"wb"))
 
 def savePDF(parent_soup, target_node, yes_phrase, url, key, school_name):
     grandparent_node = target_node.parent.parent
