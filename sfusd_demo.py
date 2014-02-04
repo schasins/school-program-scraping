@@ -17,6 +17,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, landscape
 
 pdf_filename = ""
+counter = 0
 
 def nextFileVariation(filename):
     i = filename.rfind(".")
@@ -99,12 +100,17 @@ def hasYesPhrase(tag, yes_phrase):
     return False
 
 def addWatermark(pdf_filename, url, key, school_name):
+    global counter
+    counter += 1
+    
     packet = StringIO()
     c = canvas.Canvas(packet, pagesize=letter)
     width, height = letter
     c.drawString(20,height+25,school_name+": "+key)
+    c.drawString(width-40, height+25, str(counter))
     link_width = c.stringWidth(url)
     link_rect = (20, height+10, link_width, 10)
+    c.drawString(width-40, height+25, str(counter))
     c.setFillColorRGB(0,0,255) #choose your font colour
     c.drawString(20, height+10, url)
     c.linkURL(url, link_rect)
