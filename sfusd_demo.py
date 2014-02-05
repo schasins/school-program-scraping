@@ -44,7 +44,7 @@ class Extractor:
        self.click_words = self.processClickStrings(click_strings)
 
        #process categorized data
-       #self.classifiers = self.processTextData(categorized_text_filename)
+       self.classifiers = self.processTextData(categorized_text_filename)
 
    '''
    Input processing
@@ -70,12 +70,13 @@ class Extractor:
            #print columns
            i = passage.find("]")
            classify_str = passage[i+1:]
+           classify_str_clean = unicode(classify_str, errors='ignore')
            for i in range(len(columns)):
                column = columns[i]
                if column == "*":
-                   training_data[column_names[i]].append((classify_str,'pos'))
+                   training_data[column_names[i]].append((classify_str_clean,'pos'))
                else:
-                   training_data[column_names[i]].append((classify_str,'neg'))
+                   training_data[column_names[i]].append((classify_str_clean,'neg'))
 
        global classifiers
        classifiers = {}
@@ -416,6 +417,26 @@ class Extractor:
                                self.savePDF(self.yes_words_pdf,parent_soup, match, yes_phrase, url, key, school_name)
        return curr_row_verdicts
 
+   def hasYesPhrase(self, tag, yes_phrase):
+       text = str(tag)
+       lower_text = text.lower()
+       num_words = len(yes_phrase.split(" "))
+       if yes_phrase in lower_text:
+           if num_words > 1:
+               return True
+           #if this is a 1-word yes phrase, some extra processing
+           left_fine = False
+           right_fine = False
+           l = lower_text.find(yes_phrase)
+           if ((l == 0) or (not lower_text[l-1].isalpha())):
+               left_fine = True
+           r = l+len(yes_phrase)
+           if ((r == len(lower_text)) or (not lower_text[r].isalpha())):
+               right_fine = True
+           if left_fine and right_fine:
+               return True
+       return False
+
    def visible(self, element):
        if element.parent.name in ['style', 'script', '[document]', 'head', 'title']:
            return False
@@ -455,25 +476,7 @@ class Extractor:
        snippet_full = "\""+snippet_clean+"\""
        return snippet_full
 
-   def hasYesPhrase(self, tag, yes_phrase):
-       text = str(tag)
-       lower_text = text.lower()
-       num_words = len(yes_phrase.split(" "))
-       if yes_phrase in lower_text:
-           if num_words > 1:
-               return True
-           #if this is a 1-word yes phrase, some extra processing
-           left_fine = False
-           right_fine = False
-           l = lower_text.find(yes_phrase)
-           if ((l == 0) or (not lower_text[l-1].isalpha())):
-               left_fine = True
-           r = l+len(yes_phrase)
-           if ((r == len(lower_text)) or (not lower_text[r].isalpha())):
-               right_fine = True
-           if left_fine and right_fine:
-               return True
-       return False
+
 
 
 
