@@ -125,7 +125,7 @@ class Extractor:
        filename_counter = 1
        while (True):
            variation_filename = filename_l+"_"+str(filename_counter)
-           candidate_filename = "spreadsheets/"+variation_filename+filename_r
+           candidate_filename = "spreadsheets/"+variation_filename+"_yes_phrases.csv"
            if (not (os.path.exists(candidate_filename))):
                break
            filename_counter += 1
@@ -320,7 +320,7 @@ class Extractor:
    def blankVerdict(self,yes_words_dict):
        verdict = {}
        for entry in yes_words_dict:
-           verdict[entry] = (False,[],[],0)
+           verdict[entry] = (0,[],[],0)
        return verdict
 
    def writeVerdicts(self,school_name,verdicts):
@@ -400,26 +400,54 @@ class Extractor:
        curr_row_verdict = curr_row_verdicts["yes_words"]
        text = soup.findAll(text=True)
        visible_text = filter(self.visible,text)
-       visible_text_string = self.soupToString(visible_text).lower()
-       for key in self.yes_words_dict:
-           #check if surpassed evidence limit for this key
-           if curr_row_verdict[key][3] < 12:
-               yes_phrases = self.yes_words_dict[key]
-               for yes_phrase in yes_phrases:
-                   if yes_phrase in visible_text_string:
-                       matches = filter((lambda tag: self.hasYesPhrase(tag,yes_phrase)), visible_text)
-                       for match in matches:
-                           key_verdict = curr_row_verdict[key]
-                           #check if surpassed evidence limit for this key
-                           if key_verdict[3] < 12:
-                               snippet = self.getSnippet(match,yes_phrase)
-                               curr_row_verdict[key] = (True, key_verdict[1]+[url], key_verdict[2]+[snippet], key_verdict[3]+1)
-                               self.savePDF(self.yes_words_pdf,parent_soup, match, yes_phrase, url, key, school_name)
+       for tag in visible_text:
+           text = str(tag)
+           lower_text = text.lower()
+           self.classifyYesWords(lower_text, curr_row_verdicts, tag, url, parent_soup, school_name)
+           self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
        return curr_row_verdicts
 
-   def hasYesPhrase(self, tag, yes_phrase):
-       text = str(tag)
-       lower_text = text.lower()
+   def classifyYesWords(self, lower_text, curr_row_verdicts, tag, url, parent_soup, school_name):
+       curr_row_verdict = curr_row_verdicts["yes_words"]
+       for key in self.yes_words_dict:
+           yes_phrase = self.yes_words_dict[key]
+           for yes_phrase in yes_phrase:
+               if self.textHasYesPhrase(lower_text, yes_phrase):
+                   key_verdict = curr_row_verdict[key]
+                   #check if surpassed evidence limit for this key
+                   if key_verdict[3] < 12:
+                       snippet = self.getSnippet(tag,yes_phrase)
+                       curr_row_verdict[key] = (1, key_verdict[1]+[url], key_verdict[2]+[snippet], key_verdict[3]+1)
+                       self.savePDF(self.yes_words_pdf, parent_soup, tag, yes_phrase, url, key, school_name)
+
+   def classifyBayes(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
+       return
+
+   def getSnippet(self,tag,yes_phrase):
+       snippet = str(tag)
+
+       #we don't want super long snippets
+       if (len(snippet) > (1000+len(yes_phrase))):
+           snippet_lower = snippet.lower()
+           i = snippet_lower.find(yes_phrase)
+           start_i = i - 300
+           if start_i < 0:
+               start_i = 0
+           end_i = i + len(yes_phrase) + 300
+           if end_i > (len(snippet)-1):
+               end_i = len(snippet) - 1
+           snippet = "..."+snippet[start_i:end_i]+"..."
+
+       try:
+           snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
+       except:
+           snippet_clean = snippet
+
+       snippet_full = "\""+snippet_clean+"\""
+       return snippet_full
+                   
+
+   def textHasYesPhrase(self, lower_text, yes_phrase):
        num_words = len(yes_phrase.split(" "))
        if yes_phrase in lower_text:
            if num_words > 1:
@@ -453,28 +481,7 @@ class Extractor:
        else:
            return str(elements).strip()
 
-   def getSnippet(self,tag,yes_phrase):
-       snippet = str(tag)
 
-       #we don't want super long snippets
-       if (len(snippet) > (1000+len(yes_phrase))):
-           snippet_lower = snippet.lower()
-           i = snippet_lower.find(yes_phrase)
-           start_i = i - 300
-           if start_i < 0:
-               start_i = 0
-           end_i = i + len(yes_phrase) + 300
-           if end_i > (len(snippet)-1):
-               end_i = len(snippet) - 1
-           snippet = "..."+snippet[start_i:end_i]+"..."
-
-       try:
-           snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
-       except:
-           snippet_clean = snippet
-
-       snippet_full = "\""+snippet_clean+"\""
-       return snippet_full
 
 
 
