@@ -393,7 +393,8 @@ def runExtraction(input_csv,yes_words_csv,categorized_text):
                    "Anti-Bullying Awareness","Anti-Bullying Policy","Overview",\
                    "Special Education Program/Inclusion","AVID","Counseling",\
                    "Special Education","Staff & Faculty Directory","About Lowell",\
-                   "Lowell PTSA","About Attendance","Wellness 101","Freshmen"]
+                   "Lowell PTSA","About Attendance","Wellness 101","Freshmen",\
+                   "Additional Information"]
     click_words = processClickStrings(click_strings)
 
     #process categorized data
@@ -427,7 +428,7 @@ def runExtraction(input_csv,yes_words_csv,categorized_text):
 def main():
     input_csv = "schools.csv"
     yes_words_csv = "yes_words.csv"
-    categorized_text = "categorized_text.txt"
+    categorized_text = "categorized_text_edited.txt"
     runExtraction(input_csv,yes_words_csv,categorized_text)
 main()
 
