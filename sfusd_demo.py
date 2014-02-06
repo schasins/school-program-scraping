@@ -18,6 +18,7 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate
 from reportlab.lib.colors import orange
 from text.classifiers import NaiveBayesClassifier
+import logging
 
 class Extractor:
    input_csv_filename = ""
@@ -48,6 +49,11 @@ class Extractor:
        if (self.use_bayes):
           #process categorized data
           self.classifiers = self.processTextData(categorized_text_filename)
+
+       #get rid of annoying weasyprint logging
+       logger = logging.getLogger('weasyprint')
+       logger.handlers = []  # Remove the default stderr handler
+       logger.addHandler(logging.FileHandler('logs/weasyprint.log'))
 
    '''
    Input processing
@@ -227,7 +233,9 @@ class Extractor:
        counter = 0
        while ((links_to_explore) and (counter < 100)):
            url = links_to_explore.pop()
+           print url
            soup, real_url, page_content = self.urlToSoup(url,orig_url)
+           print real_url
            if soup == None:
                continue
 
