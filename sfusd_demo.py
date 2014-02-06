@@ -21,6 +21,7 @@ from text.classifiers import NaiveBayesClassifier
 
 class Extractor:
    input_csv_filename = ""
+   use_bayes = False
     
    classifiers = {}
    yes_words_dict = {}
@@ -31,11 +32,12 @@ class Extractor:
    bayes_csv = None # a file object for the csv
    bayes_pdf = "" # the filename for the pdf
     
-   def __init__(self, input_csv_filename, yes_words_csv_filename, click_strings, categorized_text_filename):
+   def __init__(self, input_csv_filename, yes_words_csv_filename, click_strings, categorized_text_filename, use_bayes):
        #process input
        #csvfile = open(input_csv, 'rb')
        #input_reader = csv.reader(csvfile, delimiter=',')
        self.input_csv_filename = input_csv_filename
+       self.use_bayes = use_bayes
 
        #process yes_words
        self.yes_words_dict = self.processYesWords(yes_words_csv_filename)
@@ -43,8 +45,9 @@ class Extractor:
        #process click_strings
        self.click_words = self.processClickStrings(click_strings)
 
-       #process categorized data
-       self.classifiers = self.processTextData(categorized_text_filename)
+       if (self.use_bayes):
+          #process categorized data
+          self.classifiers = self.processTextData(categorized_text_filename)
 
    '''
    Input processing
@@ -216,7 +219,7 @@ class Extractor:
                    links_to_explore.append(new_url)
                    identified_links[new_url] = True
            #only want to run classification on that inner content
-           curr_row_verdicts = self.classify(soup,soup.find("div", {"id": "content"}),curr_row_verdicts,real_url,page_content,school_name)
+           curr_row_verdicts = self.classify(soup,soup.find("div", {"id": "content"}),curr_row_verdicts,real_url,school_name)
 
        #now go through links_to_explore until run out, or until too many
        #for instance, lincolnhigh has this weird thing where it puts a return_url in the url
@@ -235,7 +238,7 @@ class Extractor:
            #we're really doing this page.  increment counter
            counter += 1
            #classify with the current page
-           curr_row_verdicts = self.classify(soup,soup,curr_row_verdicts,real_url,page_content,school_name)
+           curr_row_verdicts = self.classify(soup,soup,curr_row_verdicts,real_url,school_name)
 
            #get new urls to add to links_to_explore
            real_url_domain = tldextract.extract(real_url).domain
@@ -396,14 +399,15 @@ class Extractor:
    Central classification functionality
    '''
 
-   def classify(self, parent_soup, soup,curr_row_verdicts,url,page_content,school_name):
+   def classify(self, parent_soup, soup,curr_row_verdicts, url, school_name):
        curr_row_verdict = curr_row_verdicts["yes_words"]
        text = soup.findAll(text=True)
        visible_text = filter(self.visible,text)
        for tag in visible_text:
            text = str(tag)
            self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
-           self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
+           if (self.use_bayes):
+               self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
        return curr_row_verdicts
 
    def classifyYesWords(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
@@ -432,7 +436,6 @@ class Extractor:
            if key_verdict[3] < 12:
                classifier = self.classifiers[key]
                ans = classifier.classify(text_clean)
-               print ans
                if ans == "pos":
                    snippet = self.getSnippet(text, None)
                    key_verdict_urls = key_verdict[1]
@@ -521,6 +524,6 @@ def main():
                    "Lowell PTSA","About Attendance","Wellness 101","Freshmen",\
                    "Additional Information"]
     categorized_text_filename = "categorized_text_edited.txt"
-    extractor = Extractor(input_csv_filename,yes_words_csv_filename,click_strings,categorized_text_filename)
+    extractor = Extractor(input_csv_filename,yes_words_csv_filename,click_strings,categorized_text_filename, False)
     extractor.extract()
 main()
