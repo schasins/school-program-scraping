@@ -402,13 +402,13 @@ class Extractor:
        visible_text = filter(self.visible,text)
        for tag in visible_text:
            text = str(tag)
-           lower_text = text.lower()
-           self.classifyYesWords(lower_text, curr_row_verdicts, tag, url, parent_soup, school_name)
+           self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
            self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
        return curr_row_verdicts
 
-   def classifyYesWords(self, lower_text, curr_row_verdicts, tag, url, parent_soup, school_name):
+   def classifyYesWords(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
        curr_row_verdict = curr_row_verdicts["yes_words"]
+       lower_text = text.lower()
        for key in self.yes_words_dict:
            yes_phrase = self.yes_words_dict[key]
            for yes_phrase in yes_phrase:
@@ -416,18 +416,37 @@ class Extractor:
                    key_verdict = curr_row_verdict[key]
                    #check if surpassed evidence limit for this key
                    if key_verdict[3] < 12:
-                       snippet = self.getSnippet(tag,yes_phrase)
-                       curr_row_verdict[key] = (1, key_verdict[1]+[url], key_verdict[2]+[snippet], key_verdict[3]+1)
+                       snippet = self.getSnippet(text,yes_phrase)
+                       key_verdict_urls = key_verdict[1]
+                       if not url in key_verdict_urls:
+                           key_verdict_urls.append(url)
+                       curr_row_verdict[key] = (1, key_verdict_urls, key_verdict[2]+[snippet], key_verdict[3]+1)
                        self.savePDF(self.yes_words_pdf, parent_soup, tag, yes_phrase, url, key, school_name)
 
    def classifyBayes(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
-       return
+       curr_row_verdict = curr_row_verdicts["bayes"]
+       text_clean = unicode(text, errors='ignore')
+       for key in self.classifiers:
+           key_verdict = curr_row_verdict[key]
+           #check if surpassed evidence limit for this key 
+           if key_verdict[3] < 12:
+               classifier = self.classifiers[key]
+               ans = classifier.classify(text_clean)
+               print ans
+               if ans == "pos":
+                   snippet = self.getSnippet(text, None)
+                   key_verdict_urls = key_verdict[1]
+                   if not url in key_verdict_urls:
+                       key_verdict_urls.append(url)
+                   curr_row_verdict[key] = (1, key_verdict_urls, key_verdict[2]+[snippet], key_verdict[3]+1)
+                   self.savePDF(self.bayes_pdf, parent_soup, tag, None, url, key, school_name)
 
-   def getSnippet(self,tag,yes_phrase):
-       snippet = str(tag)
-
+   def getSnippet(self,snippet,yes_phrase):
        #we don't want super long snippets
-       if (len(snippet) > (1000+len(yes_phrase))):
+       if (not yes_phrase):
+           if len(snippet) > 1200:
+               snippet = snippet[:1200]
+       elif (len(snippet) > (1000+len(yes_phrase))):
            snippet_lower = snippet.lower()
            i = snippet_lower.find(yes_phrase)
            start_i = i - 300
