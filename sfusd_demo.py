@@ -233,8 +233,10 @@ class Extractor:
        counter = 0
        while ((links_to_explore) and (counter < 100)):
            url = links_to_explore.pop()
-           print url
            soup, real_url, page_content = self.urlToSoup(url,orig_url)
+           if real_url in identified_links:
+              continue
+           identified_links[real_url] = True
            print real_url
            if soup == None:
                continue
