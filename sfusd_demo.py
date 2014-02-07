@@ -231,8 +231,8 @@ class Extractor:
        #for instance, lincolnhigh has this weird thing where it puts a return_url in the url
        #and thus keeps generating new links for way too long
        counter = 0
-       while ((links_to_explore) and (counter < 100)):
-           url = links_to_explore.pop()
+       while ((links_to_explore) and (counter < 50)):
+           url = links_to_explore.pop(0)
            soup, real_url, page_content = self.urlToSoup(url,orig_url)
            if real_url in identified_links:
               continue
@@ -368,32 +368,43 @@ class Extractor:
        c.save()
 
    def savePDF(self, pdf_filename, parent_soup, target_node, yes_phrase, url, key, school_name):
-       grandparent_node = target_node.parent.parent
-       parent_node = target_node.parent
-       parent_contents = parent_node.contents
-       for i in range(len(parent_contents)):
-           if parent_contents[i] == target_node:
-               break
-       content = str(target_node)
-       text = content.lower()
-       j = text.find(yes_phrase)
-       tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
-       if yes_phrase:
-           tag.append(content[:j])
-           bold = Tag(parent_soup, "b")
-           bold.insert(0,content[j:(j + len(yes_phrase))])
-           tag.append(bold)
-           tag.append(content[(j + len(yes_phrase)):])
-       else:
-           tag.append(content)
-       parent_node.contents[i] = tag
+       if target_node:
+          grandparent_node = target_node.parent.parent
+          parent_node = target_node.parent
+          parent_contents = parent_node.contents
+          for i in range(len(parent_contents)):
+             if parent_contents[i] == target_node:
+                break
+          content = str(target_node)
+          text = content.lower()
+          j = text.find(yes_phrase)
+          tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
+          if yes_phrase:
+             tag.append(content[:j])
+             bold = Tag(parent_soup, "b")
+             bold.insert(0,content[j:(j + len(yes_phrase))])
+             tag.append(bold)
+             tag.append(content[(j + len(yes_phrase)):])
+          else:
+             tag.append(content)
+          parent_node.contents[i] = tag
 
-       body = Tag(parent_soup,"body")
-       body.append(grandparent_node)
-       weasyprint = HTML(string=body.prettify())
-       tmp_filename = 'pdfs/tmp.pdf'
-       weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
-       parent_node.contents[i] = target_node #return to old state
+          body = Tag(parent_soup,"body")
+          body.append(grandparent_node)
+       else:
+          body = parent_soup
+       try:
+          weasyprint = HTML(string=body.prettify())
+          tmp_filename = 'pdfs/tmp.pdf'
+          weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
+       except:
+          print "weasyprint failed on url: "+url
+          if target_node:
+             parent_node.contents[i] = target_node #return to old state
+          return
+
+       if target_node:
+          parent_node.contents[i] = target_node #return to old state
 
        sep_filename = "pdfs/sep.pdf"
        self.makeSepPage(sep_filename, url, key, school_name)
@@ -413,11 +424,14 @@ class Extractor:
        curr_row_verdict = curr_row_verdicts["yes_words"]
        text = soup.findAll(text=True)
        visible_text = filter(self.visible,text)
+       visible_text_str = self.soupToString(visible_text)
+       if (self.use_bayes):
+           self.classifyBayesShort(visible_text_str, curr_row_verdicts, url, parent_soup, school_name)
        for tag in visible_text:
            text = str(tag)
            self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
-           if (self.use_bayes):
-               self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
+           #if (self.use_bayes):
+               #self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
        return curr_row_verdicts
 
    def classifyYesWords(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
@@ -454,6 +468,25 @@ class Extractor:
                    curr_row_verdict[key] = (1, key_verdict_urls, key_verdict[2]+[snippet], key_verdict[3]+1)
                    self.savePDF(self.bayes_pdf, parent_soup, tag, None, url, key, school_name)
 
+   def classifyBayesShort(self, text, curr_row_verdicts, url, parent_soup, school_name):
+       curr_row_verdict = curr_row_verdicts["bayes"]
+       text_clean = unicode(text, errors='ignore')
+       for key in self.classifiers:
+           key_verdict = curr_row_verdict[key]
+           #check if surpassed evidence limit for this key 
+           if key_verdict[3] < 12:
+               classifier = self.classifiers[key]
+               ans = classifier.classify(text_clean)
+               if ans == "pos":
+                   print key
+                   snippet = text
+                   key_verdict_urls = key_verdict[1]
+                   if not url in key_verdict_urls:
+                       key_verdict_urls.append(url)
+                   curr_row_verdict[key] = (1, key_verdict_urls, key_verdict[2]+[snippet], key_verdict[3]+1)
+                   self.savePDF(self.bayes_pdf, parent_soup, None, None, url, key, school_name)
+                   
+
    def getSnippet(self,snippet,yes_phrase):
        #we don't want super long snippets
        if (not yes_phrase):
@@ -474,6 +507,11 @@ class Extractor:
            snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
        except:
            snippet_clean = snippet
+
+       snippet_clean = snippet_clean.replace('\n', ' ')
+       snippet_clean = snippet_clean.replace('\r', ' ')
+       #print snippet_clean
+       #print ord(snippet_clean[0])
 
        snippet_full = "\""+snippet_clean+"\""
        return snippet_full
@@ -534,6 +572,6 @@ def main():
                    "Lowell PTSA","About Attendance","Wellness 101","Freshmen",\
                    "Additional Information"]
     categorized_text_filename = "categorized_text_edited.txt"
-    extractor = Extractor(input_csv_filename,yes_words_csv_filename,click_strings,categorized_text_filename, False)
+    extractor = Extractor(input_csv_filename,yes_words_csv_filename,click_strings,categorized_text_filename, True)
     extractor.extract()
 main()
