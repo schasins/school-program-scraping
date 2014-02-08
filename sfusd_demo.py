@@ -16,7 +16,7 @@ from PyPDF2 import PdfFileMerger, PdfFileReader, PdfFileWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate
-from reportlab.lib.colors import orange
+from reportlab.lib.colors import orange, black
 from text.classifiers import NaiveBayesClassifier
 import logging
 
@@ -32,7 +32,9 @@ class Extractor:
    yes_words_pdf = "" # the filename for the pdf
    bayes_csv = None # a file object for the csv
    bayes_pdf = "" # the filename for the pdf
-    
+
+   debug = False
+
    def __init__(self, input_csv_filename, yes_words_csv_filename, click_strings, categorized_text_filename, use_bayes):
        #process input
        #csvfile = open(input_csv, 'rb')
@@ -199,6 +201,11 @@ class Extractor:
        print "*****"
        print school_name
 
+       if self.debug:
+          cont = raw_input("Continue? ")
+          if cont[0] == "n" or cont[0] == "N":
+             exit()
+
        soup, real_url, page_content = self.urlToSoup(school_sfusd_url,"")
        if not soup:
            return
@@ -357,8 +364,9 @@ class Extractor:
    def makeSepPage(self, filename, url, key, school_name):
        c = canvas.Canvas(filename, pagesize=letter)
        width, height = letter
-       c.setFillColor(orange) #choose your font colour
+       c.setFillColor(black) #choose your font colour
        c.drawString(30,3*height/4+40,school_name)
+       c.setFillColor(orange) #choose your font colour
        c.drawString(30,3*height/4+20,key)
        link_width = c.stringWidth(url)
        link_rect = (30, 3*height/4, link_width, 10)
@@ -367,28 +375,76 @@ class Extractor:
        c.linkURL(url, link_rect)
        c.save()
 
+   def makeSepPageURL(self, filename, url, keys, school_name):
+       c = canvas.Canvas(filename, pagesize=letter)
+       width, height = letter
+       x = 30
+       y = height - 60
+       c.setFillColor(black) #choose your font colour
+       c.drawString(x,y,school_name)
+       c.setFillColor(orange) #choose your font colour
+       for key in keys:
+          y -= 20
+          c.drawString(x,y,key)
+       y -= 20
+       link_width = c.stringWidth(url)
+       link_rect = (x, y, link_width, 10)
+       c.setFillColorRGB(0,0,255) #choose your font colour
+       c.drawString(x, y, url)
+       c.linkURL(url, link_rect)
+       c.save()
+
+   def highlightedNode(self, target_node, yes_phrase, parent_soup):
+       content = str(target_node)
+       text = content.lower()
+       j = text.find(yes_phrase)
+       tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
+       if yes_phrase:
+          tag.append(content[:j])
+          bold = Tag(parent_soup, "b")
+          bold.insert(0,content[j:(j + len(yes_phrase))])
+          tag.append(bold)
+          tag.append(content[(j + len(yes_phrase)):])
+       else:
+          tag.append(content)
+       return tag
+
+   def highlightNode(self,target_node, yes_phrase, parent_soup):
+       new_node = self.highlightedNode(target_node, yes_phrase, parent_soup)
+       self.replaceNode(target_node, new_node)
+
+   def replaceNode(self, old_node, new_node):
+       parent_node = old_node.parent
+       parent_contents = parent_node.contents
+       for i in range(len(parent_contents)):
+          if parent_contents[i] == old_node:
+             break
+       parent_node.contents[i] = new_node
+
+   def savePDFURL(self, pdf_filename, soup, url, keys, school_name):
+       try:
+          weasyprint = HTML(string=soup.prettify())
+          tmp_filename = 'pdfs/tmp.pdf'
+          weasyprint.write_pdf(tmp_filename,stylesheets=[CSS(string='body { font-size: 10px; font-family: serif !important }')])
+       except:
+          print "weasyprint failed on url: "+url
+          return
+
+       sep_filename = "pdfs/sep.pdf"
+       self.makeSepPageURL(sep_filename, url, keys, school_name)
+
+       merger = PdfFileMerger()
+       if (os.path.exists(pdf_filename)):
+           merger.append(PdfFileReader(file(pdf_filename, 'rb')))
+       merger.append(PdfFileReader(file(sep_filename, 'rb')))
+       merger.append(PdfFileReader(file(tmp_filename, 'rb')))
+       merger.write(pdf_filename)
+
    def savePDF(self, pdf_filename, parent_soup, target_node, yes_phrase, url, key, school_name):
        if target_node:
           grandparent_node = target_node.parent.parent
-          parent_node = target_node.parent
-          parent_contents = parent_node.contents
-          for i in range(len(parent_contents)):
-             if parent_contents[i] == target_node:
-                break
-          content = str(target_node)
-          text = content.lower()
-          j = text.find(yes_phrase)
-          tag = Tag(parent_soup, "div", [("style", "background-color:#FF8A0D")])
-          if yes_phrase:
-             tag.append(content[:j])
-             bold = Tag(parent_soup, "b")
-             bold.insert(0,content[j:(j + len(yes_phrase))])
-             tag.append(bold)
-             tag.append(content[(j + len(yes_phrase)):])
-          else:
-             tag.append(content)
-          parent_node.contents[i] = tag
-
+          tag = self.highlightedNode(target_node, yes_phrase, parent_soup)
+          self.replaceNode(target_node, tag)
           body = Tag(parent_soup,"body")
           body.append(grandparent_node)
        else:
@@ -400,11 +456,11 @@ class Extractor:
        except:
           print "weasyprint failed on url: "+url
           if target_node:
-             parent_node.contents[i] = target_node #return to old state
+             self.replaceNode(tag, target_node) #return to old state
           return
 
        if target_node:
-          parent_node.contents[i] = target_node #return to old state
+          self.replaceNode(tag, target_node) #return to old state
 
        sep_filename = "pdfs/sep.pdf"
        self.makeSepPage(sep_filename, url, key, school_name)
@@ -424,19 +480,28 @@ class Extractor:
        curr_row_verdict = curr_row_verdicts["yes_words"]
        text = soup.findAll(text=True)
        visible_text = filter(self.visible,text)
-       visible_text_str = self.soupToString(visible_text)
+
+       #bayes stuff
        if (self.use_bayes):
+           visible_text_str = self.soupToString(visible_text)
            self.classifyBayesShort(visible_text_str, curr_row_verdicts, url, parent_soup, school_name)
+
+       #yes words stuff
+       keys = []
        for tag in visible_text:
            text = str(tag)
-           self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
-           #if (self.use_bayes):
-               #self.classifyBayes(text, curr_row_verdicts, tag, url, parent_soup, school_name)
+           one_tag_keys = self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
+           keys = keys+one_tag_keys
+       keys = set(keys) #unique
+       self.savePDFURL(self.yes_words_pdf, parent_soup, url, keys, school_name)
+
+       #verdict from all analyses, in their separate dicts
        return curr_row_verdicts
 
    def classifyYesWords(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
        curr_row_verdict = curr_row_verdicts["yes_words"]
        lower_text = text.lower()
+       found_keys = []
        for key in self.yes_words_dict:
            yes_phrase = self.yes_words_dict[key]
            for yes_phrase in yes_phrase:
@@ -449,7 +514,9 @@ class Extractor:
                        if not url in key_verdict_urls:
                            key_verdict_urls.append(url)
                        curr_row_verdict[key] = (1, key_verdict_urls, key_verdict[2]+[snippet], key_verdict[3]+1)
-                       self.savePDF(self.yes_words_pdf, parent_soup, tag, yes_phrase, url, key, school_name)
+                       self.highlightNode(tag, yes_phrase, parent_soup)
+                       found_keys.append(key)
+       return found_keys
 
    def classifyBayes(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
        curr_row_verdict = curr_row_verdicts["bayes"]
@@ -572,6 +639,6 @@ def main():
                    "Lowell PTSA","About Attendance","Wellness 101","Freshmen",\
                    "Additional Information"]
     categorized_text_filename = "categorized_text_edited.txt"
-    extractor = Extractor(input_csv_filename,yes_words_csv_filename,click_strings,categorized_text_filename, True)
+    extractor = Extractor(input_csv_filename,yes_words_csv_filename,click_strings,categorized_text_filename, False)
     extractor.extract()
 main()
