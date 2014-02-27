@@ -1,8 +1,9 @@
+import os
+import sys
 from BeautifulSoup import BeautifulSoup, Tag
 import urllib
 import urllib2
 import csv
-import os
 import re
 import json
 from collections import OrderedDict
@@ -19,6 +20,10 @@ from reportlab.platypus import SimpleDocTemplate
 from reportlab.lib.colors import orange, black
 from text.classifiers import NaiveBayesClassifier
 import logging
+from nltk import word_tokenize, wordpunct_tokenize
+from nltk.stem.lancaster import LancasterStemmer
+import operator
+from RAKE.rake import *
 
 class Extractor:
    input_csv_filename = ""
@@ -27,6 +32,7 @@ class Extractor:
    classifiers = {}
    yes_words_dict = {}
    click_words = []
+   maybe_words = {}
 
    yes_words_csv = None # a file object for the csv
    yes_words_pdf = "" # the filename for the pdf
@@ -52,6 +58,10 @@ class Extractor:
           #process categorized data
           self.classifiers = self.processTextData(categorized_text_filename)
 
+       #process maybe words
+       self.processTextDataForMaybeWords(categorized_text_filename)
+       exit()
+       
        #get rid of annoying weasyprint logging
        logger = logging.getLogger('weasyprint')
        logger.handlers = []  # Remove the default stderr handler
@@ -60,6 +70,96 @@ class Extractor:
    '''
    Input processing
    '''
+
+   def processTextDataForMaybeWords(self, filename):
+       f = open(filename, 'r')
+       column_names_str = f.readline()
+       str = re.search('\[(.*)\]',column_names_str)
+       column_names = str.group(1).split(",")
+       #print column_names
+
+       training_data = {}
+       for key in column_names:
+           training_data[key] = []
+
+       whole_str = f.read()
+       passages = whole_str.split("*DELIM*")
+       passages = passages[1:]
+       for passage in passages:
+           columns_str = re.search('\[(.*)\]',passage)
+           columns = columns_str.group(1).split(",")
+           #print columns
+           i = passage.find("]")
+           classify_str = passage[i+1:]
+           classify_str_clean = unicode(classify_str, errors='ignore')
+           for i in range(len(columns)):
+               column = columns[i]
+               if column == "*":
+                   training_data[column_names[i]].append(classify_str_clean)
+
+       maybe_words = {}
+       for key in training_data:
+           print key
+           #self.maybe_words[key] = self.getMaybeWords(training_data[key])
+           self.maybe_words[key] = self.getMaybeWordsRake(training_data[key])
+       return
+
+   def getMaybeWordsRake(self, text_ls):
+      text = (".  ").join(text_ls)
+
+      # Split text into sentences
+      sentenceList = splitSentences(text)
+      #stoppath = "RAKE/FoxStoplist.txt" #Fox stoplist contains "numbers", so it will not find "natural numbers" like in Table 1.1
+      stoppath = "RAKE/SmartStoplist.txt" #SMART stoplist misses some of the lower-scoring keywords in Figure 1.5, which means that the top 1/3 cuts off one of the 4.0 score words in Table 1.1
+      stopwordpattern = buildStopwordRegExPattern(stoppath)
+
+      # generate candidate keywords
+      phraseList = generateCandidateKeywords(sentenceList, stopwordpattern)
+
+      # calculate individual word scores
+      wordscores = calculateWordScores(phraseList)
+
+      # generate candidate keyword scores
+      keywordcandidates = generateCandidateKeywordScores(phraseList, wordscores)
+      if debug: print keywordcandidates
+
+      sortedKeywords = sorted(keywordcandidates.iteritems(), key=operator.itemgetter(1), reverse=True)
+      if debug: print sortedKeywords
+
+      totalKeywords = len(sortedKeywords)
+      if debug: print totalKeywords
+      print sortedKeywords[0:(totalKeywords/3)]
+
+   def getMaybeWords(self, text_ls):
+      ignoreWords = ["","have","her","there","the","be","to","of","and","a","in","that","it","for","on","with","as","at","this","but","his","by","from","they","or","an","will","would","so","even","is","be","am","are"];
+
+      word_ls = []
+      for text in text_ls:
+         word_ls += wordpunct_tokenize(text)
+         
+      frequencies = {}
+      st = LancasterStemmer()
+      for word in word_ls:
+         if not word[0].isalpha():
+            continue
+         if word in ignoreWords:
+            continue
+         word_stem = st.stem(word)
+         if word_stem in frequencies:
+            frequencies[word_stem] += 1
+         else:
+            frequencies[word_stem] = 1
+
+      sorted_frequencies = sorted(frequencies.iteritems(), key = operator.itemgetter(1), reverse =  True)
+      #print sorted_frequencies
+
+      max_words = 30
+      if len(sorted_frequencies) < max_words:
+         max_words = len(sorted_frequencies)
+      word_tuples = sorted_frequencies[0:max_words]
+      words = [tuple[0] for tuple in word_tuples]
+      print words
+      return words
 
    def processTextData(self, filename):
        f = open(filename, 'r')
@@ -89,10 +189,9 @@ class Extractor:
                else:
                    training_data[column_names[i]].append((classify_str_clean,'neg'))
 
-       global classifiers
-       classifiers = {}
+       self.classifiers = {}
        for key in training_data:
-           classifiers[key] = NaiveBayesClassifier(training_data[key])
+           self.classifiers[key] = NaiveBayesClassifier(training_data[key])
        return classifiers
 
    def processClickStrings(self,click_strings):
@@ -216,6 +315,8 @@ class Extractor:
        #start accumulating links to explore from the school sites, starting with the main page
        links_to_explore = []
        identified_links = {}
+       visited_links = {}
+       visited_links[real_url] = True
        orig_url = ""
        orig_domain = ""
 
@@ -241,9 +342,9 @@ class Extractor:
        while ((links_to_explore) and (counter < 50)):
            url = links_to_explore.pop(0)
            soup, real_url, page_content = self.urlToSoup(url,orig_url)
-           if real_url in identified_links:
+           if real_url in visited_links:
               continue
-           identified_links[real_url] = True
+           visited_links[real_url] = True
            print real_url
            if soup == None:
                continue
@@ -493,7 +594,9 @@ class Extractor:
            one_tag_keys = self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
            keys = keys+one_tag_keys
        keys = set(keys) #unique
-       self.savePDFURL(self.yes_words_pdf, parent_soup, url, keys, school_name)
+       if keys:
+          print "keys non-empty"
+          self.savePDFURL(self.yes_words_pdf, parent_soup, url, keys, school_name)
 
        #verdict from all analyses, in their separate dicts
        return curr_row_verdicts
@@ -511,11 +614,26 @@ class Extractor:
                    if key_verdict[3] < 12:
                        snippet = self.getSnippet(text,yes_phrase)
                        key_verdict_urls = key_verdict[1]
+                       key_verdict_snippets = key_verdict[2]
                        if not url in key_verdict_urls:
-                           key_verdict_urls.append(url)
-                       curr_row_verdict[key] = (1, key_verdict_urls, key_verdict[2]+[snippet], key_verdict[3]+1)
-                       self.highlightNode(tag, yes_phrase, parent_soup)
-                       found_keys.append(key)
+                          key_verdict_urls.append(url)
+                       if (snippet in key_verdict_snippets):
+                          #often we'll get a link that appears on many pages, like "Alamo PTA"
+                          #add the url and snippet, but don't up the counter
+                          curr_row_verdict[key] = (1, key_verdict_urls, key_verdict_snippets+[snippet], key_verdict[3])
+                          #highlight the node in case we print this page
+                          self.highlightNode(tag, yes_phrase, parent_soup)
+                          #but don't add this key to the found_keys.  if no new evidence found in other iterations, won't print page
+                          #found_keys.append(key)
+                       else:
+                          #new evidence
+                          #add the url and snippet, up the counter
+                          curr_row_verdict[key] = (1, key_verdict_urls, key_verdict_snippets+[snippet], key_verdict[3]+1)
+                          #highlight the node, since we'll be printing this page
+                          self.highlightNode(tag, yes_phrase, parent_soup)
+                          #add key to the found_keys so we print this page
+                          found_keys.append(key)
+                          
        return found_keys
 
    def classifyBayes(self, text, curr_row_verdicts, tag, url, parent_soup, school_name):
