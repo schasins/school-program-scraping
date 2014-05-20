@@ -60,7 +60,6 @@ class Extractor:
 
        #process maybe words
        self.processTextDataForMaybeWords(categorized_text_filename)
-       exit()
        
        #get rid of annoying weasyprint logging
        logger = logging.getLogger('weasyprint')
@@ -266,11 +265,11 @@ class Extractor:
       
    def writeHeadings(self,output,yes_words_dict):
        sorted_yes_words_dict = OrderedDict(sorted(yes_words_dict.items(), key=lambda t: t[0]))
-       output.write("School name;")
+       output.write("School name,")
        for key in sorted_yes_words_dict:
-           output.write(key+";")
-           output.write(key+" : URL;")
-           output.write(key+" : Passage;")
+           output.write(key+",")
+           output.write(key+" : URL,")
+           output.write(key+" : Passage,")
        output.write("\n")
 
    '''
@@ -450,12 +449,12 @@ class Extractor:
 
    def writeVerdict(self,school_name,output,verdict):
        sorted_verdict = OrderedDict(sorted(verdict.items(), key=lambda t: t[0]))
-       output.write(str(school_name)+";")
+       output.write("\""+str(school_name)+"\",")
        for key in sorted_verdict:
            value = sorted_verdict[key]
-           output.write(str(value[0])+";")
-           output.write(", ".join(value[1])+";")
-           output.write(", ".join(value[2])+";")
+           output.write(str(value[0])+",")
+           output.write("; ".join(value[1])+",")
+           output.write("; ".join(value[2])+",")
        output.write("\n")
 
    '''
