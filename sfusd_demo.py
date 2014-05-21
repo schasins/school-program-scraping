@@ -488,7 +488,7 @@ class Extractor:
        styleBH.alignment = TA_CENTER
        
        data= [map(lambda (k,v): Paragraph(k, styleBH), sorted_verdict.iteritems()),
-              map(lambda (k,v): Paragraph("<br/> ------------- <br/>".join(v[2]), styleN), sorted_verdict.iteritems())]
+              map(lambda (k,v): Paragraph("<br/> ------------- <br/>".join(set(map(lambda (x): x.strip(), v[2]))), styleN), sorted_verdict.iteritems())]
 
        cwidth = 120
        table = Table(data, colWidths=[cwidth]*len(sorted_verdict))
