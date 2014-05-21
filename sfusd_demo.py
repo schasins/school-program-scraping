@@ -208,7 +208,7 @@ class Extractor:
 
    def processYesWords(self,yes_words_csv): 
        csvfile = open(yes_words_csv, 'rb')
-       yes_words_reader = csv.reader(csvfile, delimiter=',')
+       yes_words_reader = csv.reader(csvfile, delimiter=';')
        yes_words_dict = {}
        done_first = False
        for yes_words_row in yes_words_reader:
@@ -791,7 +791,7 @@ class Extractor:
        
 def main():
     input_csv_filename = "schools.csv"
-    yes_words_csv_filename = "yes_words.csv"
+    yes_words_csv_filename = "yes_words_updated.csv"
     click_strings = ["Academic Counseling","Counseling News","Who We Work With", \
                    "Advisory","Mission/Vision","Staff/Administration", \
                    "Wellness Center","Parent Information","Home","SARC", \
