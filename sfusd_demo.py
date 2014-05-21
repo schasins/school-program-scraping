@@ -18,6 +18,9 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate
 from reportlab.lib.colors import orange, black
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, Table, TableStyle
+from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
 from text.classifiers import NaiveBayesClassifier
 import logging
 from nltk import word_tokenize, wordpunct_tokenize
@@ -369,6 +372,7 @@ class Extractor:
 
        #we've run out of links to explore, so we have our final answer
        self.writeVerdicts(school_name,curr_row_verdicts)
+       self.writeVerdictsPDF(school_name,curr_row_verdicts)
 
    def getLinksFromSoup(self,soup,click_words):
        new_links = []
@@ -453,13 +457,60 @@ class Extractor:
        for key in sorted_verdict:
            value = sorted_verdict[key]
            output.write(str(value[0])+",")
-           output.write("; ".join(value[1])+",")
-           output.write("; ".join(value[2])+",")
+           urls = map(lambda x: "\""+x+"\"",value[1])
+           snippets = map(lambda x: "\""+x+"\"",value[2])
+           output.write("; ".join(urls)+",")
+           output.write("; ".join(snippets)+",")
        output.write("\n")
 
    '''
    PDF Stuff
    '''
+   
+   def writeVerdictsPDF(self,school_name,verdicts):
+       page_filename = "pdfs/page.pdf"
+       self.writeVerdictPDF(school_name, page_filename, verdicts["yes_words"])
+
+       pdf_filename = self.yes_words_pdf
+       merger = PdfFileMerger()
+       if (os.path.exists(pdf_filename)):
+           merger.append(PdfFileReader(file(pdf_filename, 'rb')))
+       merger.append(PdfFileReader(file(page_filename, 'rb')))
+       merger.write(pdf_filename)
+
+   def writeVerdictPDF(self,school_name, filename, verdict):
+       sorted_verdict = OrderedDict(sorted(verdict.items(), key=lambda t: t[0]))
+       
+       styles = getSampleStyleSheet()
+       styleN = styles["BodyText"]
+       styleN.alignment = TA_LEFT
+       styleBH = styles["Normal"]
+       styleBH.alignment = TA_CENTER
+       
+       data= [map(lambda (k,v): Paragraph(k, styleBH), sorted_verdict.iteritems()),
+              map(lambda (k,v): Paragraph("<br/> ------------- <br/>".join(v[2]), styleN), sorted_verdict.iteritems())]
+
+       cwidth = 120
+       table = Table(data, colWidths=[cwidth]*len(sorted_verdict))
+
+       table.setStyle(TableStyle([
+          ('INNERGRID', (0,0), (-1,-1), 0.25, black),
+          ('BOX', (0,0), (-1,-1), 0.25, black),
+          ('VALIGN',(0,0),(-1,-1),'TOP')
+          ]))
+          
+       margin = 20
+       w, h = table.wrap(0,0)
+       pagewidth = w+margin*2
+       pageheight = h+margin*3
+       c = canvas.Canvas(filename, pagesize=(pagewidth,pageheight))
+       
+       table.drawOn(c, margin, pageheight - h - 2*margin)
+
+       c.setFillColor(black) #choose your font colour
+       c.drawString(margin,pageheight-margin,school_name)
+       
+       c.save()
 
    def makeSepPage(self, filename, url, key, school_name):
        c = canvas.Canvas(filename, pagesize=letter)
@@ -591,11 +642,6 @@ class Extractor:
        for tag in visible_text:
            text = str(tag)
            one_tag_keys = self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
-           keys = keys+one_tag_keys
-       keys = set(keys) #unique
-       if keys:
-          print "keys non-empty"
-          self.savePDFURL(self.yes_words_pdf, parent_soup, url, keys, school_name)
 
        #verdict from all analyses, in their separate dicts
        return curr_row_verdicts
@@ -697,8 +743,8 @@ class Extractor:
        #print snippet_clean
        #print ord(snippet_clean[0])
 
-       snippet_full = "\""+snippet_clean+"\""
-       return snippet_full
+       #snippet_full = "\""+snippet_clean+"\""
+       return snippet_clean
                    
 
    def textHasYesPhrase(self, lower_text, yes_phrase):
@@ -720,7 +766,8 @@ class Extractor:
        return False
 
    def visible(self, element):
-       if element.parent.name in ['style', 'script', '[document]', 'head', 'title']:
+       reject_tags = ['style', 'script', '[document]', 'head', 'title']
+       if (element.parent.name in reject_tags) or ("name" in dir(element) and element.name in reject_tags):
            return False
        elif re.match('<!--.*-->', str(element)):
            return False
