@@ -491,6 +491,9 @@ class Extractor:
        styleBH = styles["Normal"]
        styleBH.alignment = TA_CENTER
        
+       for (k,v) in sorted_verdict.iteritems():
+              print "\n ------------- \n".join(set(map(lambda (x): x.strip(), v[2])))
+       
        data= [map(lambda (k,v): Paragraph(k, styleBH), sorted_verdict.iteritems()),
               map(lambda (k,v): Paragraph("<br/> ------------- <br/>".join(set(map(lambda (x): x.strip(), v[2]))), styleN), sorted_verdict.iteritems())]
 
@@ -644,7 +647,7 @@ class Extractor:
        #yes words stuff
        keys = []
        for tag in visible_text:
-           text = str(tag)
+           text = self.nodeContent(tag)
            one_tag_keys = self.classifyYesWords(text, curr_row_verdicts, tag, url, parent_soup, school_name)
 
        #verdict from all analyses, in their separate dicts
@@ -722,11 +725,13 @@ class Extractor:
                    
 
    def isHeader(self, tag):
-       tag_length = len(str(tag).split(" "))
+       tag_length = len(self.nodeContent(tag).split(" "))
        if (tag_length > 10):
               return False
        next_tag = self.nextSibling(tag)
-       next_tag_length = len(str(next_tag).split())
+       if next_tag == None:
+              return False
+       next_tag_length = len(self.nodeContent(next_tag).split())
        if (next_tag_length > 10):
               return True
        return False
@@ -738,17 +743,20 @@ class Extractor:
        else:
               ntag = tag.nextSibling
        #want text in it
-       if (len(str(ntag)) == 0):
+       if (ntag == None):
+              return None
+       if (len(self.nodeContent(ntag)) == 0 or (not self.visible(ntag))):
               ntag = self.nextSibling(ntag)
        return ntag
 
    def getSnippet(self,snippet,yes_phrase,tag):
        if self.isHeader(tag):
            next_sibling = self.nextSibling(tag)
-           if isinstance(tag,Tag):
-                  next_sibling_text = next_sibling.getText()
-           else:
-                  next_sibling_text = str(next_sibling)
+           next_sibling_text = self.nodeContent(next_sibling)
+           print "NEXT SIBLING TEXT:"
+           print next_sibling_text
+           print isinstance(next_sibling, NavigableString)
+           print isinstance(next_sibling, Tag)
            snippet = snippet + "\n" + next_sibling_text
           
        #we don't want super long snippets
@@ -812,6 +820,14 @@ class Extractor:
            return string
        else:
            return str(elements).strip()
+           
+   def nodeContent(self, tag):
+       if isinstance(tag, Tag):
+              return tag.getText()
+       elif isinstance(tag, NavigableString):
+              return str(tag)
+       else:
+              return ""
 
 
 
