@@ -657,7 +657,7 @@ class Extractor:
                    key_verdict = curr_row_verdict[key]
                    #check if surpassed evidence limit for this key
                    if key_verdict[3] < 12:
-                       snippet = self.getSnippet(text,yes_phrase)
+                       snippet = self.getSnippet(text,yes_phrase,tag)
                        key_verdict_urls = key_verdict[1]
                        key_verdict_snippets = key_verdict[2]
                        if not url in key_verdict_urls:
@@ -691,7 +691,7 @@ class Extractor:
                classifier = self.classifiers[key]
                ans = classifier.classify(text_clean)
                if ans == "pos":
-                   snippet = self.getSnippet(text, None)
+                   snippet = self.getSnippet(text, None, tag)
                    key_verdict_urls = key_verdict[1]
                    if not url in key_verdict_urls:
                        key_verdict_urls.append(url)
@@ -717,7 +717,27 @@ class Extractor:
                    self.savePDF(self.bayes_pdf, parent_soup, None, None, url, key, school_name)
                    
 
-   def getSnippet(self,snippet,yes_phrase):
+   def isHeader(self, tag):
+       tag_length = len(str(tag).split(" "))
+       if (tag_length > 10):
+              return False
+       next_tag = self.nextSibling(tag)
+       next_tag_length = len(str(next_tag).split())
+       if (next_tag_length > 10):
+              return True
+       return False
+       
+   #the next sibling with text in it    
+   def nextSibling(self, tag):
+       next = tag.nextSibling
+       while (len(str(next)) == 0):
+              next = next.nextSibling
+       return next
+
+   def getSnippet(self,snippet,yes_phrase,tag):
+       #if self.isHeader(tag):
+       #    snippet = snippet + str(self.nextSibling(tag))
+          
        #we don't want super long snippets
        if (not yes_phrase):
            if len(snippet) > 1200:
@@ -732,11 +752,9 @@ class Extractor:
            if end_i > (len(snippet)-1):
                end_i = len(snippet) - 1
            snippet = "..."+snippet[start_i:end_i]+"..."
-
-       try:
-           snippet_clean = unicodedata.normalize('NFKD', snippet).encode('ascii','ignore')
-       except:
-           snippet_clean = snippet
+              
+       #snippet_clean = unicodedata.normalize('NFKD', unicode(snippet)).encode('utf8','ignore')
+       snippet_clean = snippet.decode("utf8","ignore").encode("utf8","ignore")
 
        snippet_clean = snippet_clean.replace('\n', ' ')
        snippet_clean = snippet_clean.replace('\r', ' ')
