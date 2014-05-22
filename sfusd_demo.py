@@ -753,10 +753,6 @@ class Extractor:
        if self.isHeader(tag):
            next_sibling = self.nextSibling(tag)
            next_sibling_text = self.nodeContent(next_sibling)
-           print "NEXT SIBLING TEXT:"
-           print next_sibling_text
-           print isinstance(next_sibling, NavigableString)
-           print isinstance(next_sibling, Tag)
            snippet = snippet + "\n" + next_sibling_text
           
        #we don't want super long snippets
