@@ -1,6 +1,6 @@
 import os
 import sys
-from BeautifulSoup import BeautifulSoup, Tag
+from BeautifulSoup import BeautifulSoup, Tag, NavigableString
 import urllib
 import urllib2
 import csv
@@ -416,7 +416,11 @@ class Extractor:
 
 
        real_url = page.geturl()
-       page_content =  page.read()
+       try:
+           page_content =  page.read()
+       except Exception:
+           print "Couldn't open url: "+url
+           return None, None, None
 
        if page.info().get('Content-Encoding') == 'gzip':
            buf = StringIO(page_content)
@@ -729,14 +733,23 @@ class Extractor:
        
    #the next sibling with text in it    
    def nextSibling(self, tag):
-       next = tag.nextSibling
-       while (len(str(next)) == 0):
-              next = next.nextSibling
-       return next
+       if isinstance(tag, NavigableString):
+              ntag = tag.parent.nextSibling
+       else:
+              ntag = tag.nextSibling
+       #want text in it
+       if (len(str(ntag)) == 0):
+              ntag = self.nextSibling(ntag)
+       return ntag
 
    def getSnippet(self,snippet,yes_phrase,tag):
-       #if self.isHeader(tag):
-       #    snippet = snippet + str(self.nextSibling(tag))
+       if self.isHeader(tag):
+           next_sibling = self.nextSibling(tag)
+           if isinstance(tag,Tag):
+                  next_sibling_text = next_sibling.getText()
+           else:
+                  next_sibling_text = str(next_sibling)
+           snippet = snippet + "\n" + next_sibling_text
           
        #we don't want super long snippets
        if (not yes_phrase):
@@ -785,7 +798,7 @@ class Extractor:
 
    def visible(self, element):
        reject_tags = ['style', 'script', '[document]', 'head', 'title']
-       if (element.parent.name in reject_tags) or ("name" in dir(element) and element.name in reject_tags):
+       if (element.parent.name in reject_tags) or (isinstance(element, Tag) and element.name in reject_tags):
            return False
        elif re.match('<!--.*-->', str(element)):
            return False
