@@ -491,9 +491,6 @@ class Extractor:
        styleBH = styles["Normal"]
        styleBH.alignment = TA_CENTER
        
-       for (k,v) in sorted_verdict.iteritems():
-              print "\n ------------- \n".join(set(map(lambda (x): x.strip(), v[2])))
-       
        data= [map(lambda (k,v): Paragraph(k, styleBH), sorted_verdict.iteritems()),
               map(lambda (k,v): Paragraph("<br/> ------------- <br/>".join(set(map(lambda (x): x.strip(), v[2]))), styleN), sorted_verdict.iteritems())]
 
@@ -664,7 +661,7 @@ class Extractor:
                    key_verdict = curr_row_verdict[key]
                    #check if surpassed evidence limit for this key
                    if key_verdict[3] < 12:
-                       snippet = self.getSnippet(text,yes_phrase,tag)
+                       snippet = self.getSnippet(text,yes_phrase,tag,parent_soup)
                        key_verdict_urls = key_verdict[1]
                        key_verdict_snippets = key_verdict[2]
                        if not url in key_verdict_urls:
@@ -698,7 +695,7 @@ class Extractor:
                classifier = self.classifiers[key]
                ans = classifier.classify(text_clean)
                if ans == "pos":
-                   snippet = self.getSnippet(text, None, tag)
+                   snippet = self.getSnippet(text, None, tag, parent_soup)
                    key_verdict_urls = key_verdict[1]
                    if not url in key_verdict_urls:
                        key_verdict_urls.append(url)
@@ -749,7 +746,7 @@ class Extractor:
               ntag = self.nextSibling(ntag)
        return ntag
 
-   def getSnippet(self,snippet,yes_phrase,tag):
+   def getSnippet(self,snippet,yes_phrase,tag,soup):
        if self.isHeader(tag):
            next_sibling = self.nextSibling(tag)
            next_sibling_text = self.nodeContent(next_sibling)
@@ -771,7 +768,10 @@ class Extractor:
            snippet = "..."+snippet[start_i:end_i]+"..."
               
        #snippet_clean = unicodedata.normalize('NFKD', unicode(snippet)).encode('utf8','ignore')
-       snippet_clean = snippet.decode("utf8","ignore").encode("utf8","ignore")
+       try:
+          snippet_clean = snippet.decode(soup.originalEncoding, 'ignore').encode('utf8','ignore')
+       except:
+          snippet_clean = unicode(snippet).encode('utf8','ignore')
 
        snippet_clean = snippet_clean.replace('\n', ' ')
        snippet_clean = snippet_clean.replace('\r', ' ')
